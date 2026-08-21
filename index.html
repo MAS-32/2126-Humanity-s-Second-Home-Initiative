@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="2126: Humanity's Second Home Initiative shared-core demo" />
+    <title>2126: Humanity's Second Home Initiative</title>
+  </head>
+  <body>
+    <div id="game" aria-label="3D game viewport"></div>
+    <div id="hud">
+      <h1 id="scene-label">LOADING</h1>
+      <p id="controls">Click the world to look · WASD to move · E to interact</p>
+      <p id="message" role="status" aria-live="polite"></p>
+      <pre id="state-panel" aria-label="Game state"></pre>
+      <div id="interaction-prompt" hidden></div>
+      <div id="crosshair" aria-hidden="true">+</div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
