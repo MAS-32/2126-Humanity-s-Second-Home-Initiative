@@ -52,7 +52,8 @@ describe('actual scene integration flow', () => {
     expect(interaction.entries.size).toBe(1);
     await interact('earth-portal');
     expect(state.get('currentScene')).toBe('earth');
-    expect(interaction.entries.size).toBe(2);
+    // Earth 现有 3 个交互项：陪伴机器人、展厅控制台（earth-interaction）、太空电梯（moon-portal）
+    expect(interaction.entries.size).toBe(3);
     expect(camera.position.toArray()).toEqual([0, 1.7, 5]);
 
     await manager.dispose();
