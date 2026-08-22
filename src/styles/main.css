@@ -14,3 +14,5 @@ canvas { display: block; }
 #state-panel { position: absolute; top: 20px; left: 20px; margin: 0; padding: 12px; background: #0008; border-radius: 8px; font-size: 12px; text-shadow: none; }
 #interaction-prompt { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); padding: 10px 16px; border: 1px solid #fff8; border-radius: 6px; background: #000b; font-weight: 700; }
 #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; line-height: 1; }
+/* 第三人称场景（Earth）下隐藏第一人称准星 */
+body.earth-tp #crosshair { display: none; }

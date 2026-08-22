@@ -26,9 +26,17 @@ describe('actual scene integration flow', () => {
     manager.register('earth', createEarthScene).register('moon', createMoonScene).register('mars', createMarsScene);
 
     const interact = async (name) => {
-      const object = manager.getCurrentScene().scene.getObjectByName(name);
+      const scene = manager.getCurrentScene().scene;
+      const object = scene.getObjectByName(name);
       object.updateWorldMatrix(true, true);
-      camera.lookAt(object.getWorldPosition(new THREE.Vector3()));
+      const targetPos = object.getWorldPosition(new THREE.Vector3());
+      // 第三人称：交互候选基于玩家（星达）与目标的距离，先把星达移到目标旁
+      const avatar = scene.getObjectByName('xingda');
+      if (avatar) {
+        avatar.position.set(targetPos.x + 1.5, 0, targetPos.z + 1.5);
+        avatar.updateMatrixWorld(true);
+      }
+      camera.lookAt(targetPos);
       camera.updateMatrixWorld(true);
       interaction.update();
       expect(interaction.active?.root).toBe(object);
@@ -40,7 +48,14 @@ describe('actual scene integration flow', () => {
     expect(camera.position.toArray()).toEqual([0, 1.7, 5]);
     await interact('earth-interaction');
     expect(state.get('visitedSolarSystem')).toBe(true);
-    await interact('moon-portal');
+    // 展厅解说 AI 是模态分支对话：关闭后才能继续其他交互
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    await interact('moon-portal'); // 触发太空电梯上升演出（约 9.4s 的 dt 驱动序列）
+    // 演出在场景 update(dt) 中推进：模拟帧推进直到转场完成
+    for (let i = 0; i < 160 && state.get('currentScene') !== 'moon'; i += 1) {
+      manager.getCurrentScene()?.update(0.1);
+      await manager.queue;
+    }
     expect(state.get('currentScene')).toBe('moon');
     expect(state.get('arrivedMoon')).toBe(true);
     expect(interaction.entries.size).toBe(2);
@@ -52,7 +67,8 @@ describe('actual scene integration flow', () => {
     expect(interaction.entries.size).toBe(1);
     await interact('earth-portal');
     expect(state.get('currentScene')).toBe('earth');
-    expect(interaction.entries.size).toBe(2);
+    // Earth 现有 6 个交互项：小满、展厅解说、M-07、A-12、登舱引导员、太空电梯
+    expect(interaction.entries.size).toBe(6);
     expect(camera.position.toArray()).toEqual([0, 1.7, 5]);
 
     await manager.dispose();

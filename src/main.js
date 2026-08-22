@@ -6,6 +6,9 @@ const message = document.querySelector('#message');
 const statePanel = document.querySelector('#state-panel');
 let messageTimer;
 
+// 状态面板是开发调试工具：默认隐藏，URL 带 #debug 时显示（演示模式不出现 JSON dump）
+statePanel.hidden = !window.location.hash.includes('debug');
+
 const ui = {
   setScene(text) { sceneLabel.textContent = text; },
   flash(text) {
@@ -13,7 +16,10 @@ const ui = {
     clearTimeout(messageTimer);
     messageTimer = setTimeout(() => { message.textContent = ''; }, 3000);
   },
-  renderState(state) { statePanel.textContent = JSON.stringify(state, null, 2); },
+  renderState(state) {
+    if (statePanel.hidden) return;
+    statePanel.textContent = JSON.stringify(state, null, 2);
+  },
 };
 
 const game = new Game({ mount: document.querySelector('#game'), ui });

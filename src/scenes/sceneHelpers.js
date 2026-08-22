@@ -37,8 +37,15 @@ export function addCube(scene, { name, color, position }) {
 export function disposeScene(scene) {
   scene.traverse((object) => {
     object.geometry?.dispose();
-    if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose());
-    else object.material?.dispose();
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    materials.forEach((material) => {
+      if (!material) return;
+      // 一并释放材质引用的纹理（如 CanvasTexture 名牌），避免显存泄漏
+      ['map', 'emissiveMap', 'normalMap', 'roughnessMap', 'alphaMap'].forEach((key) => {
+        material[key]?.dispose?.();
+      });
+      material.dispose();
+    });
   });
   scene.clear();
 }
