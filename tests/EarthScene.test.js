@@ -4,6 +4,15 @@ import { GameState } from '../src/core/GameState.js';
 import { InteractionSystem } from '../src/core/InteractionSystem.js';
 import { createEarthScene } from '../src/scenes/EarthScene.js';
 
+// jsdom 中不真实请求星达 GLB：loadAsync 永久挂起，星达保持青蓝占位体，测试保持确定
+vi.mock('three/addons/loaders/GLTFLoader.js', () => ({
+  GLTFLoader: class {
+    loadAsync() {
+      return new Promise(() => {});
+    }
+  },
+}));
+
 function makeCtx() {
   const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 500);
   const prompt = { show: vi.fn(), hide: vi.fn(), dispose: vi.fn() };

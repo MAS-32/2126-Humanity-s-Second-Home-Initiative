@@ -7,6 +7,15 @@ import { createEarthScene } from '../src/scenes/EarthScene.js';
 import { createMoonScene } from '../src/scenes/MoonScene.js';
 import { createMarsScene } from '../src/scenes/MarsScene.js';
 
+// jsdom 中不真实请求星达 GLB：loadAsync 永久挂起，星达保持占位体
+vi.mock('three/addons/loaders/GLTFLoader.js', () => ({
+  GLTFLoader: class {
+    loadAsync() {
+      return new Promise(() => {});
+    }
+  },
+}));
+
 describe('actual scene integration flow', () => {
   it('uses one state/interaction manager through Earth → Moon → Mars → Earth', async () => {
     const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 100);

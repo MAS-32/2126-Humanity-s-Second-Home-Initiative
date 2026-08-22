@@ -239,6 +239,8 @@ export function createEarthScene(ctx) {
       ascent.dispose();
       futureCity.dispose();
       guide.dispose();
+      // 星达：标记销毁，迟到完成的 GLB 加载会被直接销毁而不再挂载
+      xingda.dispose?.();
       document.body.classList.remove('earth-tp');
       // 归还 Core：清掉 Earth 注入的第三人称状态，避免泄漏到 Moon/Mars
       ctx.interaction.setProximitySource?.(null);
