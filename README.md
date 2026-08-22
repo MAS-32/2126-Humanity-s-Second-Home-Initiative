@@ -16,7 +16,7 @@
 ## 一、快速开始
 
 ```bash
-git clone <仓库地址> moon-outpost-2126
+git clone --branch feature/moon-outpost --single-branch https://github.com/MAS-32/2126-Humanity-s-Second-Home-Initiative.git moon-outpost-2126
 cd moon-outpost-2126
 npm install          # 零运行时依赖，立即完成
 npm run dev          # 打开 http://127.0.0.1:8123/
@@ -103,3 +103,8 @@ moon-outpost-2126/
 - **移动端**：以桌面体验为主，未做完整触屏适配。
 - **发射承接**：运输舰升空后淡出并在 12 秒后就位下一艘；真实火星航行承接（`mars-city.html`）为页面跳转形态，尚未做"飞行中"过场。
 - **Three.js CDN**：`three@0.160.0` 走 jsDelivr，离线环境需本地化（见 `deployment.md`）。
+
+## 七、交付地址
+
+- GitHub：<https://github.com/MAS-32/2126-Humanity-s-Second-Home-Initiative/tree/feature/moon-outpost>
+- 在线版本：<https://moon-outpost-2126.pages.dev/>

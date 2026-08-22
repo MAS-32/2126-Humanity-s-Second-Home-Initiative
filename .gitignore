@@ -19,3 +19,4 @@ npm-debug.log*
 
 # 构建期临时文件
 .build-check.mjs
+.wrangler/

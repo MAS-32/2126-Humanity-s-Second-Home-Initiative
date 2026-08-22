@@ -24,6 +24,12 @@
     "static-site"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MAS-32/2126-Humanity-s-Second-Home-Initiative.git",
+    "directory": "."
+  },
+  "homepage": "https://moon-outpost-2126.pages.dev/",
   "dependencies": {},
   "devDependencies": {}
 }

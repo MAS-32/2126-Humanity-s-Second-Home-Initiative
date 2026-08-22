@@ -26,6 +26,7 @@ export function mountMoonModule(moon) {
 
   // 父页面消息 → 驱动场景
   const onMessage = (e) => {
+    if (e.source && e.source !== window.parent) return;
     const d = e && e.data;
     if (!d || typeof d.type !== 'string' || !d.type.startsWith('moon:')) return;
     switch (d.type) {

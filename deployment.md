@@ -17,7 +17,7 @@ npm run preview    # 本地验证 http://127.0.0.1:4173/
 - 项目名固定为 **`moon-outpost-2126`**，线上地址稳定：
   **https://moon-outpost-2126.pages.dev/**
 - 重新发布请保持项目名不变，否则公开 URL 会变。
-- 已连接 GitHub 仓库后，可在 Cloudflare Dashboard 配置自动构建（push main 即发布）。
+- 当前生产部署使用 Cloudflare Pages 项目 `moon-outpost-2126`；源码位于共享仓库的 `feature/moon-outpost` 分支。
 
 ## 2. Vercel（备选）
 
@@ -42,8 +42,7 @@ npm run preview    # 本地验证 http://127.0.0.1:4173/
 ## 5. 环境变量
 
 - **无运行时环境变量**（纯前端，无后端）。
-- 可选构建期注入（`MOON_BACK_URL` / `MOON_MARS_URL` 等）说明见 `.env.example`；
-  如需注入，在 CI/部署平台 Build 中设置并替换 `src/js/MoonConfig.js → INTEGRATION` 的默认值即可。
+- 本地服务器仅支持可选的 `PORT`；页面跳转与消息桥配置集中在 `src/js/MoonConfig.js → INTEGRATION`，不是环境变量。
 
 ## 6. 离线 / 内网部署注意
 
