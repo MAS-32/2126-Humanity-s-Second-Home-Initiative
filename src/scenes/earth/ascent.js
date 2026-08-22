@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { playFade } from './dialogue.js';
 
 // 太空电梯地月上升演出（scripted cutscene，dt 驱动状态机）。
 // 八阶段强节奏转场（约 10.8s），任何时刻画面里都有明确的视觉参照物：
@@ -8,6 +7,7 @@ import { playFade } from './dialogue.js';
 // 跳过：E / Esc 即按即快进；长按空格 0.6s 快进（防误触）。
 // 演出期间玩家输入被禁用；结束前恢复输入（保证 SceneManager 捕获到 enabled=true）。
 // 云/星/地球/空间站/月球都是临时视觉对象，随 Earth 场景 dispose 一并销毁，与 MoonScene 无关。
+// 收尾：白场章节标题（CHAPTER II · 月球）覆盖场景切换，玩家永远看不到开发态过渡。
 
 const ELEVATOR = new THREE.Vector3(35, 0, -35);
 const PHASE = {
@@ -55,7 +55,6 @@ function makeCloudSprite(scale, opacity) {
 export function createAscent({ ctx, scene, avatar, elevator = null, audio = null }) {
   let active = false;
   let t = 0;
-  let fadeCleanup = null;
   let skyColor = null;
   let tempObjects = [];
   let finished = false;
@@ -64,6 +63,8 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
   const cameraStart = new THREE.Vector3();
   const avatarStart = new THREE.Vector3();
   const lookTarget = new THREE.Vector3();
+  const boardingCamEnd = new THREE.Vector3(); // 登舱阶段镜头终点（liftoff 起始混入用）
+  const tmpCam = new THREE.Vector3();
   const CITY_CENTER = new THREE.Vector3(0, 4, 0);
 
   let mistEl = null;
@@ -212,6 +213,45 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
     ctx.ui.flash(text);
   };
 
+  // ---- 上升阶段 HUD（极简：一句话状态 + 轨道高度）----
+  let ascentHud = null;
+  let ascentHudText = '';
+  const showAscentHud = () => {
+    if (ascentHud) return;
+    ascentHud = document.createElement('div');
+    ascentHud.className = 'earth-ascent-hud';
+    document.body.append(ascentHud);
+  };
+  const setAscentHud = (text) => {
+    if (!ascentHud || text === ascentHudText) return;
+    ascentHudText = text;
+    ascentHud.innerHTML = text;
+  };
+  const hideAscentHud = () => {
+    ascentHud?.remove();
+    ascentHud = null;
+    ascentHudText = '';
+  };
+
+  // ---- 章节转场：白场 + 章节标题覆盖场景切换（同步 go('moon')，DOM 遮罩跨场景驻留）----
+  // 生命周期自管理：Earth 场景 dispose 会在 go('moon') 时立即发生，遮罩必须
+  // 活得比 Earth 久——由自身定时器移除，不随场景清理。循环往返时每场至多一个，
+  // 2.7s 后自动消失，不积累。
+  const playChapterTransition = () => {
+    const el = document.createElement('div');
+    el.className = 'earth-chapter';
+    el.innerHTML = `
+      <div class="earth-chapter-kicker">CHAPTER II</div>
+      <div class="earth-chapter-title">月球 · 静海前哨</div>
+      <div class="earth-chapter-sub">2126 · 人类第二家园计划</div>
+    `;
+    document.body.append(el);
+    // 用 setTimeout 而非 rAF 触发过渡：软件渲染/低帧环境下 rAF 可能延迟到遮罩已被移除
+    setTimeout(() => el.classList.add('is-active'), 30);
+    setTimeout(() => el.classList.add('is-leaving'), 1700);
+    setTimeout(() => el.remove(), 2700);
+  };
+
   // 各阶段的镜头位姿：返回 { height, camOffset, look }
   const api = {
     isActive: () => active,
@@ -243,6 +283,8 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
       props.earth.visible = false;
       props.station.visible = false;
       props.moon.visible = false;
+      showAscentHud();
+      setAscentHud('地球轨道电梯 · 登舱确认');
     },
 
     update(dt) {
@@ -270,6 +312,16 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
 
       avatar.position.set(ELEVATOR.x, height, ELEVATOR.z);
 
+      // 上升 HUD：状态语 + 轨道高度（世界高度映射为可读公里数，起飞后显示）
+      if (t >= PHASE.boarding) {
+        const altitudeKm = ((height - 2.05) * 0.26).toFixed(1); // 最高点约 47.5 km（近地空间观感）
+        const status = t < PHASE.clouds ? '运载舱上升中'
+          : t < PHASE.darken ? '正在穿过云层'
+            : t < PHASE.curve ? '离开地表控制区'
+              : '近地空间 · 前方月球前哨';
+        setAscentHud(`${status} · 轨道高度 <b>${altitudeKm}</b> km`);
+      }
+
       // 天空颜色：城市蓝 → 高层浅蓝 → 深蓝 → 太空黑
       if (skyColor) {
         const deep = new THREE.Color(0x24436b);
@@ -287,17 +339,25 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
 
       // ---- 阶段演出 ----
       if (t < PHASE.boarding) {
-        // 登舱：星达滑上平台，镜头拉到近顶俯视（避开锚定塔斜撑与周边建筑的视线遮挡）
+        // 登舱：星达滑上平台。镜头垂直先起、水平后移（避免擦穿站台旁建筑），
+        // 终点在广场一侧的开敞通道上方——星达登舱的剪影以城市为背景。
         const k = easeInOut(t / PHASE.boarding);
         avatar.position.lerpVectors(avatarStart, new THREE.Vector3(ELEVATOR.x, 2.05, ELEVATOR.z), k);
-        const camTarget = new THREE.Vector3(ELEVATOR.x + 2.5, 10, ELEVATOR.z + 2.5);
-        camera.position.lerpVectors(cameraStart, camTarget, k);
+        boardingCamEnd.set(ELEVATOR.x - 6, 10.5, ELEVATOR.z + 6);
+        camera.position.set(
+          lerp(cameraStart.x, boardingCamEnd.x, k * k),
+          lerp(cameraStart.y, boardingCamEnd.y, Math.sqrt(k)),
+          lerp(cameraStart.z, boardingCamEnd.z, k * k),
+        );
         lookTarget.copy(avatar.position).add(new THREE.Vector3(0, 1, 0));
         camera.lookAt(lookTarget);
       } else if (t < PHASE.liftoff) {
-        // 城市缩小：镜头保持大俯视——城市在脚下快速缩小（本阶段的核心画面）
+        // 城市缩小：镜头保持大俯视——城市在脚下快速缩小（本阶段的核心画面）。
+        // 前 0.7s 从登舱机位平滑混入本阶段公式机位，避免相位切换的硬跳。
         const k = phase01(t, PHASE.boarding, PHASE.liftoff);
-        camera.position.set(ELEVATOR.x + 2.5, height + 8, ELEVATOR.z + 2.5);
+        tmpCam.set(ELEVATOR.x + 6.5, height + 9, ELEVATOR.z + 6.5);
+        const blend = easeInOut(Math.min(1, (t - PHASE.boarding) / 0.7));
+        camera.position.lerpVectors(boardingCamEnd, tmpCam, blend);
         lookTarget.copy(avatar.position).add(new THREE.Vector3(0, 1, 0))
           .lerp(CITY_CENTER, 0.6 * easeInOut(k));
         camera.lookAt(lookTarget);
@@ -390,8 +450,9 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
       document.removeEventListener('keyup', onKeyUp);
       hideSkipHint();
       hideMist();
+      hideAscentHud();
       elevator?.setBoarding?.(false);
-      fadeCleanup = playFade();
+      playChapterTransition(); // 白场章节标题覆盖场景切换（自管理，不随 Earth dispose 移除）
       // 先恢复输入，再转场：SceneManager 会捕获 enabled=true 并传递给下一场景
       ctx.player.setEnabled?.(true);
       ctx.interaction.setEnabled?.(true);
@@ -403,11 +464,9 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
       document.removeEventListener('keyup', onKeyUp);
       hideSkipHint();
       hideMist();
+      hideAscentHud();
       elevator?.setBoarding?.(false);
-      if (fadeCleanup) {
-        fadeCleanup();
-        fadeCleanup = null;
-      }
+      // 章节转场遮罩由自身定时器移除——它需要比 Earth 活得久以盖住场景切换
       // 临时对象留在 scene 中，由 disposeScene 统一释放
       tempObjects = [];
       active = false;

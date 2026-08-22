@@ -53,11 +53,11 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
     // 展厅解说 AI 是模态分支对话：Esc 关闭后再继续
     await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' })));
     await interactWith('moon-portal'); // 触发太空电梯上升演出（约 9.4s）
-    await expect(page.locator('#scene-label')).toHaveText('MOON TEST SCENE', { timeout: 30_000 });
+    await expect(page.locator('#scene-label')).toHaveText('月球 · 静海前哨', { timeout: 30_000 });
     await interactWith('moon-interaction');
     await expect.poll(() => page.evaluate(() => window.__GAME__.state.get('talkedMoonScientist'))).toBe(true);
     await interactWith('mars-portal');
-    await expect(page.locator('#scene-label')).toHaveText('MARS TEST SCENE');
+    await expect(page.locator('#scene-label')).toHaveText('火星 · 第二家园');
     await expect.poll(() => page.evaluate(() => window.__GAME__.state.get('arrivedMars'))).toBe(true);
     await interactWith('earth-portal');
     await expect(page.locator('#scene-label')).toHaveText('2126 · 地球');

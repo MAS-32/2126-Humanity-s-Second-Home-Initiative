@@ -17,6 +17,11 @@ const DEFAULT_TP_OPTIONS = {
   moveSpeed: null, // 缺省沿用 speed
   cameraObstacles: null, // 可选：相机避障 mesh 列表（场景注入的主要建筑）
   playerRadius: 0.45, // 角色碰撞半径（配合 setObstacles 推挤）
+  // 相机避障：以注视点为球心的近似 spherecast（中/左/右三射线取最近命中），
+  // 防止楼角、门廊柱等从中心射线旁边“漏”进来造成穿模。
+  cameraRadius: 0.35, // 等效球半径；0 = 退回单中心射线
+  collisionMargin: 0.5, // 命中点后撤距离，保证相机不贴墙
+  minCameraDistance: 1.5, // 避障拉近的下限，防止贴脸
   // 相机避障距离平滑：拉近要急（防穿模），恢复要慢（防弹跳感）
   collisionSnapDamping: 18,
   collisionRecoverDamping: 4.5,
@@ -55,6 +60,8 @@ export class PlayerController {
     this.cameraRaycaster = new THREE.Raycaster();
     this.tmpLook = new THREE.Vector3();
     this.tmpDir = new THREE.Vector3();
+    this.tmpSide = new THREE.Vector3();
+    this.tmpOrigin = new THREE.Vector3();
 
     this.onCanvasClick = () => {
       if (this.enabled && this.document.pointerLockElement !== this.domElement) {
@@ -235,11 +242,27 @@ export class PlayerController {
       if (fullDistance > 1e-4) {
         this.tmpDir.normalize();
         let clampedDistance = fullDistance;
-        this.cameraRaycaster.set(look, this.tmpDir);
-        this.cameraRaycaster.far = fullDistance;
-        const hits = this.cameraRaycaster.intersectObjects(tp.cameraObstacles, true);
-        if (hits.length > 0) {
-          clampedDistance = Math.max(hits[0].distance - 0.35, 1.2);
+        // 近似 spherecast：中心射线 + 水平左右偏移射线（等效 cameraRadius 球），取最近命中。
+        // 射线近乎垂直时水平偏移退化，自动退回单中心射线。
+        const radius = tp.cameraRadius ?? 0;
+        this.tmpSide.crossVectors(this.tmpDir, this.camera.up);
+        this.tmpSide.y = 0;
+        const useSideRays = radius > 0 && this.tmpSide.lengthSq() > 1e-6;
+        if (useSideRays) this.tmpSide.normalize();
+        const rayCount = useSideRays ? 3 : 1;
+        for (let i = 0; i < rayCount; i += 1) {
+          const origin = this.tmpOrigin.copy(look);
+          if (i === 1) origin.addScaledVector(this.tmpSide, -radius);
+          else if (i === 2) origin.addScaledVector(this.tmpSide, radius);
+          this.cameraRaycaster.set(origin, this.tmpDir);
+          this.cameraRaycaster.far = fullDistance;
+          const hits = this.cameraRaycaster.intersectObjects(tp.cameraObstacles, true);
+          if (hits.length > 0) {
+            clampedDistance = Math.min(clampedDistance, hits[0].distance);
+          }
+        }
+        if (clampedDistance < fullDistance) {
+          clampedDistance = Math.max(clampedDistance - tp.collisionMargin, tp.minCameraDistance);
         }
         if (this.tpSmoothedDistance == null) this.tpSmoothedDistance = clampedDistance;
         const smoothing = clampedDistance < this.tpSmoothedDistance

@@ -53,10 +53,20 @@ export function buildCompanionRobot(scene) {
   let elapsed = 0;
   return {
     group,
-    update(dt) {
+    /** playerPos 可选：玩家靠近时小满平滑转身面向玩家，远离后恢复待机摇摆 */
+    update(dt, playerPos = null) {
       elapsed += dt;
       group.position.y = 1.15 + Math.sin(elapsed * 1.8) * 0.09;
-      group.rotation.y = Math.sin(elapsed * 0.6) * 0.35;
+      let desiredYaw = Math.sin(elapsed * 0.6) * 0.35;
+      if (playerPos) {
+        const dx = playerPos.x - group.position.x;
+        const dz = playerPos.z - group.position.z;
+        if (Math.hypot(dx, dz) < 8) desiredYaw = Math.atan2(dx, dz);
+      }
+      let diff = desiredYaw - group.rotation.y;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      group.rotation.y += diff * (1 - Math.exp(-6 * dt));
       head.rotation.x = Math.sin(elapsed * 1.1) * 0.08;
       halo.rotation.z += dt * 1.4;
     },

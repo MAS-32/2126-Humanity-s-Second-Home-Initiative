@@ -216,10 +216,12 @@ export function buildCivilizationHall(scene) {
   group.add(approach);
 
   // ---- 全息太阳系（视觉核心）----
-  // 高度压到第三人称视线自然覆盖的区间（相机 lookHeight 约 1.15，全息核心 2.75）
+  // 高度压到第三人称视线自然覆盖的区间（相机 lookHeight 约 1.5，全息核心 2.75）
+  // 初始为「休眠」状态：微缩投影 + 行星隐藏。玩家首次操作控制台时 activate()
+  // 触发数秒激活演出：点亮 → 轨道展开 → 行星逐一出现 → 地/月/火高亮脉冲。
   const hologram = new THREE.Group();
   hologram.position.y = 2.75;
-  hologram.scale.setScalar(1.12); // 视觉权重放大：让玩家一进厅就撞上“太阳系”
+  hologram.scale.setScalar(1.12 * 0.32); // 休眠态：待激活的微缩蓝图
   group.add(hologram);
 
   // 太阳：核心 + 双层辉光壳 + 大尺度体积光晕 sprite
@@ -240,14 +242,16 @@ export function buildCivilizationHall(scene) {
     hologram.add(makeOrbitLine(spec.radius));
     const pivot = new THREE.Group();
     pivot.rotation.y = index * 0.9; // 初始相位错开
+    pivot.visible = false; // 休眠态隐藏，激活演出中逐一点亮
     const planet = new THREE.Mesh(
       new THREE.SphereGeometry(spec.size, 18, 14),
       holoMaterial(spec.color, spec.glow ? 0.95 : 0.8),
     );
     planet.position.x = spec.radius;
     pivot.add(planet);
+    let halo = null;
     if (spec.glow) {
-      const halo = makeGlowSprite(spec.color === 0x3fa8f5 ? 'rgba(80, 170, 245, 1)' : 'rgba(242, 122, 77, 1)', spec.size * 5.5, 0.5);
+      halo = makeGlowSprite(spec.color === 0x3fa8f5 ? 'rgba(80, 170, 245, 1)' : 'rgba(242, 122, 77, 1)', spec.size * 5.5, 0.5);
       halo.position.x = spec.radius;
       pivot.add(halo);
     }
@@ -263,7 +267,7 @@ export function buildCivilizationHall(scene) {
       pivot.add(label);
     }
     hologram.add(pivot);
-    planetPivots.push({ pivot, spec, angle: pivot.rotation.y });
+    planetPivots.push({ pivot, spec, angle: pivot.rotation.y, halo, haloBaseScale: halo?.scale.x ?? 1 });
 
     // 轨道粒子流（全息数据沿轨道缓慢流动的感觉）
     const flowCount = 5;
@@ -322,6 +326,11 @@ export function buildCivilizationHall(scene) {
   }
   const routeMoon = makeRoute(0x8ff2ff);
   const routeMars = makeRoute(0xffb98a);
+  // 航线在休眠态隐藏，激活演出尾声才接入（文明通路被“点亮”）
+  routeMoon.line.visible = false;
+  routeMoon.stream.visible = false;
+  routeMars.line.visible = false;
+  routeMars.stream.visible = false;
 
   const tmpFrom = new THREE.Vector3();
   const tmpTo = new THREE.Vector3();
@@ -414,14 +423,57 @@ export function buildCivilizationHall(scene) {
   };
 
   let elapsed = 0;
+
+  // ---- 激活演出状态机 ----
+  // activation: 0 = 休眠（微缩蓝图）→ 1 = 完全展开。首次 activate() 驱动 0→1；
+  // 完成后 highlightT 触发地/月/火高亮脉冲（地球是家园、月球是前哨、火星是第二家园）。
+  const ACTIVATION_DURATION = 3.4;
+  let activation = 0;
+  let activating = false;
+  let activated = false;
+  let highlightT = -1;
+  const easeOutCubic = (t) => 1 - (1 - t) ** 3;
+  const earthHalo = planetPivots[2].halo;
+  const earthHaloBase = planetPivots[2].haloBaseScale;
+  const marsHalo = planetPivots[3].halo;
+  const marsHaloBase = planetPivots[3].haloBaseScale;
+
   return {
     consoleObject: consoleGroup,
     collider: { x: HALL_POS.x, z: HALL_POS.z, r: 10.6 }, // 玩家不可穿入展厅基座
     blocker: platform, // 相机避障
+    /** 首次调用触发激活演出；返回是否为本场首次激活（供场景播主文案） */
+    activate() {
+      if (activated) return false;
+      activated = true;
+      activating = true;
+      return true;
+    },
     /** playerPos 可选：传入后用于数据面板的 proximity 显示 */
     update(dt, playerPos = null) {
       elapsed += dt;
-      hologram.rotation.y += dt * 0.06;
+
+      // 激活进度推进
+      if (activating) {
+        activation = Math.min(1, activation + dt / ACTIVATION_DURATION);
+        if (activation >= 1) {
+          activating = false;
+          highlightT = 0; // 展开完成：地/月/火高亮脉冲
+        }
+      }
+      const eased = easeOutCubic(activation);
+      hologram.scale.setScalar(1.12 * (0.32 + 0.68 * eased));
+      // 行星逐一点亮（按轨道由内向外）；航线在尾声接入
+      planetPivots.forEach((entry, index) => {
+        entry.pivot.visible = eased > 0.18 + index * 0.075;
+      });
+      const routesOn = eased > 0.92;
+      routeMoon.line.visible = routesOn;
+      routeMoon.stream.visible = routesOn;
+      routeMars.line.visible = routesOn;
+      routeMars.stream.visible = routesOn;
+
+      hologram.rotation.y += dt * (0.015 + eased * 0.045); // 休眠缓转 → 激活后正常运转
       sun.rotation.y += dt * 0.4;
       ringGroups.forEach(({ ring, speed }) => { ring.rotation.y += dt * speed; });
       planetPivots.forEach((entry) => {
@@ -442,11 +494,29 @@ export function buildCivilizationHall(scene) {
       holoRingB.rotation.z -= dt * 0.14;
       emitter.rotation.z += dt * 0.8;
 
-      // 太阳呼吸 + 光晕闪烁
+      // 太阳呼吸 + 光晕闪烁；冲天光束随激活增亮（演出期间强烈脉冲，之后保持更高基准）
       const breathe = 0.9 + Math.sin(elapsed * 1.5) * 0.1;
       sunGlow.scale.setScalar(breathe);
       sunHalo.material.opacity = 0.5 + Math.sin(elapsed * 2.3) * 0.1;
-      skyBeam.material.opacity = 0.06 + Math.sin(elapsed * 1.1) * 0.025;
+      const beamBase = 0.06 + eased * 0.05 + (activating ? 0.1 * (0.5 + Math.sin(elapsed * 9) * 0.5) : 0);
+      skyBeam.material.opacity = beamBase + Math.sin(elapsed * 1.1) * 0.025;
+
+      // 激活尾声：地/月/火高亮脉冲（3 次渐弱闪烁），告诉玩家“这三颗是关键”
+      if (highlightT >= 0) {
+        highlightT += dt;
+        const k = highlightT / 2.8;
+        if (k >= 1) {
+          highlightT = -1;
+          if (earthHalo) earthHalo.scale.setScalar(earthHaloBase);
+          if (marsHalo) marsHalo.scale.setScalar(marsHaloBase);
+          moon.scale.setScalar(1);
+        } else {
+          const pulse = 1 + Math.abs(Math.sin(k * Math.PI * 3)) * 0.9 * (1 - k);
+          if (earthHalo) earthHalo.scale.setScalar(earthHaloBase * pulse);
+          if (marsHalo) marsHalo.scale.setScalar(marsHaloBase * pulse);
+          moon.scale.setScalar(pulse);
+        }
+      }
 
       // 扫描环：上升 + 扩散 + 淡出，3.2s 一个周期
       const scanT = (elapsed % 3.2) / 3.2;

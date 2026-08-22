@@ -9,7 +9,7 @@ export function createMarsScene(ctx) {
   });
 
   ctx.interaction.add(earthPortal, {
-    text: 'Return to Earth',
+    text: '返回地球',
     distance: 7,
     onInteract() { ctx.sceneManager.go('earth'); },
   });
@@ -19,8 +19,8 @@ export function createMarsScene(ctx) {
     spawn,
     enter() {
       ctx.state.set('arrivedMars', true);
-      ctx.ui.setScene('MARS TEST SCENE');
-      ctx.ui.flash('Mars reached: arrivedMars = true');
+      ctx.ui.setScene('火星 · 第二家园');
+      ctx.ui.flash('已抵达火星前哨——第二家园建设进行中。');
     },
     update() {},
     exit() {},

@@ -246,3 +246,173 @@
   0%, 100% { opacity: 0.85; }
   50% { opacity: 0.45; }
 }
+
+/* 文明尺度主文案：展厅首次激活时的中央 cinematic 字幕 */
+.earth-cinematic {
+  position: fixed;
+  left: 50%;
+  top: 22%;
+  transform: translateX(-50%) translateY(8px);
+  padding: 14px 30px;
+  border-top: 1px solid rgba(140, 235, 250, 0.5);
+  border-bottom: 1px solid rgba(140, 235, 250, 0.5);
+  background: linear-gradient(90deg, transparent, rgba(6, 24, 34, 0.72) 18%, rgba(6, 24, 34, 0.72) 82%, transparent);
+  color: #eafcff;
+  font-size: clamp(17px, 2.4vw, 24px);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 18px rgba(90, 220, 240, 0.55);
+  white-space: nowrap;
+  z-index: 28;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.earth-cinematic.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* 2126 城市生命维持网络：左下角常驻极简状态面板 */
+.earth-city-status {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  padding: 10px 14px 9px;
+  border: 1px solid rgba(80, 200, 220, 0.32);
+  border-radius: 10px;
+  background: linear-gradient(160deg, rgba(8, 28, 38, 0.66), rgba(10, 44, 56, 0.56));
+  box-shadow: 0 4px 16px rgba(0, 40, 60, 0.28);
+  color: #d8f4fb;
+  font-size: 11.5px;
+  z-index: 18;
+  pointer-events: none;
+  user-select: none;
+}
+
+.earth-city-status-title {
+  color: rgba(140, 226, 242, 0.85);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  margin-bottom: 6px;
+}
+
+.earth-city-status-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  line-height: 1.75;
+}
+
+.earth-city-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.earth-city-status-dot.is-ok {
+  background: #5fe8a8;
+  box-shadow: 0 0 6px rgba(95, 232, 168, 0.8);
+}
+
+.earth-city-status-dot.is-ai {
+  background: #6fe3f2;
+  box-shadow: 0 0 6px rgba(111, 227, 242, 0.8);
+  animation: earth-city-status-blink 2.2s ease-in-out infinite;
+}
+
+@keyframes earth-city-status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.earth-city-status-label {
+  color: rgba(200, 238, 246, 0.78);
+  letter-spacing: 0.05em;
+}
+
+.earth-city-status-value {
+  margin-left: auto;
+  padding-left: 14px;
+  color: #aef4d8;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 太空电梯上升演出：轨道高度 HUD（极简） */
+.earth-ascent-hud {
+  position: fixed;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border: 1px solid rgba(140, 235, 250, 0.35);
+  border-radius: 999px;
+  background: rgba(6, 16, 24, 0.62);
+  color: #cfeef8;
+  font-size: 12.5px;
+  letter-spacing: 0.1em;
+  z-index: 34;
+  pointer-events: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.earth-ascent-hud b {
+  color: #ffd9a0;
+  font-weight: 700;
+}
+
+/* 章节转场：白场中的章节标题（Earth → Moon） */
+.earth-chapter {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: radial-gradient(circle at 50% 45%, #ffffff 0%, #d8eef6 55%, #a8d4e6 100%);
+  z-index: 45;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.5s ease-in;
+}
+
+.earth-chapter.is-active {
+  opacity: 1;
+}
+
+.earth-chapter.is-leaving {
+  opacity: 0;
+  transition: opacity 0.8s ease-out;
+}
+
+.earth-chapter-kicker {
+  color: rgba(30, 70, 90, 0.75);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+}
+
+.earth-chapter-title {
+  color: #0e2a38;
+  font-size: clamp(26px, 4.6vw, 44px);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+}
+
+.earth-chapter-sub {
+  color: rgba(30, 70, 90, 0.6);
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+}

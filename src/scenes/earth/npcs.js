@@ -162,11 +162,21 @@ export function buildNpcs(scene) {
     m07,
     a12,
     guide,
-    update(dt) {
+    /** playerPos 可选：传入后 NPC 在玩家靠近时平滑转身面向玩家（对话感），远离后恢复待机摇摆 */
+    update(dt, playerPos = null) {
       elapsed += dt;
       npcs.forEach(({ group, extras }, i) => {
         group.position.y = Math.sin(elapsed * 1.5 + i * 2.1) * 0.05;
-        group.rotation.y = Math.sin(elapsed * 0.5 + i) * 0.22;
+        let desiredYaw = Math.sin(elapsed * 0.5 + i) * 0.22; // 待机：缓慢环顾
+        if (playerPos) {
+          const dx = playerPos.x - group.position.x;
+          const dz = playerPos.z - group.position.z;
+          if (Math.hypot(dx, dz) < 7.5) desiredYaw = Math.atan2(dx, dz); // 玩家靠近：面向玩家
+        }
+        let diff = desiredYaw - group.rotation.y;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        group.rotation.y += diff * (1 - Math.exp(-6 * dt));
         if (extras.cups) extras.cups.rotation.y += dt * 3.2; // 风速杯持续旋转
       });
     },

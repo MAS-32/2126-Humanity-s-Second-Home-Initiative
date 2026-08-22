@@ -13,6 +13,7 @@ import { createGuide } from './earth/guide.js';
 import { makeNameTag } from './earth/nametag.js';
 import { loadFutureCity } from './earth/futureCity.js';
 import { createEarthAudio } from './earth/audio.js';
+import { createCityStatus } from './earth/cityStatus.js';
 
 // 2126：人类第二家园计划 · 第一关「地球」。
 // 体验链：中央广场出生（第三人称操控星达）→ 小满/NPC 对话 → 深空规划馆 → 太空电梯
@@ -88,11 +89,11 @@ export function createEarthScene(ctx) {
   xingda.group.position.set(spawn.x, 0, spawn.z);
   ctx.player.setThirdPerson?.({
     target: xingda.group,
-    distance: 5.4,
+    distance: 5.6,
     height: 2.5,
-    lookHeight: 1.15,
+    lookHeight: 1.5, // 注视点略高于星达头顶：角色稳定位于画面下方偏中央
     cameraDamping: 8,
-    rotateSensitivity: 0.0021,
+    rotateSensitivity: 0.0016, // 降低鼠标过敏，环视更稳
     cameraObstacles: [...(city.cameraBlockers ?? []), hall.blocker, elevator.blocker].filter(Boolean),
   });
   ctx.player.setObstacles?.([...(city.colliders ?? []), hall.collider, elevator.collider].filter(Boolean));
@@ -109,11 +110,36 @@ export function createEarthScene(ctx) {
     },
   });
 
+  // 2126 城市生命维持网络：常驻极简环境 UI（世界观可视化）
+  const cityStatus = createCityStatus();
+
   // ---- 对话打开状态：对话/演出期间暂停星达的“好奇心观察” ----
   let dialogueOpen = false;
   const closeDialogue = () => {
     dialogueOpen = false;
     xingda.faceToward(null);
+  };
+
+  // ---- 文明尺度主文案（展厅首次激活时的中央 cinematic 字幕）----
+  let captionEl = null;
+  let captionTimer = null;
+  const clearCaption = () => {
+    clearTimeout(captionTimer);
+    captionTimer = null;
+    captionEl?.remove();
+    captionEl = null;
+  };
+  const showCinematicCaption = (text) => {
+    clearCaption();
+    captionEl = document.createElement('div');
+    captionEl.className = 'earth-cinematic';
+    captionEl.textContent = text;
+    document.body.append(captionEl);
+    requestAnimationFrame(() => captionEl?.classList.add('is-visible'));
+    captionTimer = setTimeout(() => {
+      captionEl?.classList.remove('is-visible');
+      captionTimer = setTimeout(clearCaption, 900);
+    }, 3800);
   };
 
   // ---- 小满：城市陪伴 AI（线性对话）----
@@ -152,6 +178,10 @@ export function createEarthScene(ctx) {
       xingda.faceToward(hall.consoleObject.getWorldPosition(new THREE.Vector3()));
       audio.play('hall-on');
       audio.play('holo');
+      // 首次激活：全息太阳系从休眠展开（数秒演出）+ 文明尺度主文案
+      if (hall.activate()) {
+        showCinematicCaption('2126 年，人类的文明边界已不再止于地球。');
+      }
       hallDialogue.open();
     },
   });
@@ -293,11 +323,12 @@ export function createEarthScene(ctx) {
       // 星达动画只作用于 visualRoot，与演出的 group 位置控制不冲突，全程保持生命感
       const moving = !ascent.isActive() && Boolean(ctx.player.keys?.size);
       xingda.update(dt, moving);
-      robot.update(dt);
+      robot.update(dt, playerPos);
       hall.update(dt, playerPos);
       elevator.update(dt);
-      npcs.update(dt);
+      npcs.update(dt, playerPos);
       guide.update(dt);
+      cityStatus.update(dt);
       futureCity.update(dt);
       ascent.update(dt);
       updateAtmosphere();
@@ -306,6 +337,8 @@ export function createEarthScene(ctx) {
 
     exit() {
       // 强制关闭对话/演出监听并恢复输入，避免把暂停状态带进下一个场景
+      clearCaption();
+      cityStatus.dispose();
       xiaomanDialogue.destroy();
       hallDialogue.destroy();
       m07Dialogue.destroy();
@@ -318,6 +351,8 @@ export function createEarthScene(ctx) {
     },
 
     dispose() {
+      clearCaption();
+      cityStatus.dispose();
       xiaomanDialogue.destroy();
       hallDialogue.destroy();
       m07Dialogue.destroy();
