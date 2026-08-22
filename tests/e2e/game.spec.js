@@ -15,6 +15,11 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
   await page.goto('/');
   await expect(page.locator('#scene-label')).toHaveText('2126 · 地球');
   await expect(page.locator('canvas')).toHaveCount(1);
+  // 等待 GLB 未来城市模型异步加载完成（真实浏览器网络加载）
+  await expect.poll(
+    () => page.evaluate(() => window.__GAME__.state.get('earthCityModel')),
+    { timeout: 20_000 },
+  ).toBe(true);
 
   async function interactWith(objectName) {
     const activeName = await page.evaluate((name) => {
@@ -62,8 +67,13 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
   await runCycle();
 
   expect(await page.locator('canvas').count()).toBe(1);
-  // Earth 现有 6 个交互项：小满、展厅解说、M-07、A-12、登舱引导员、太空电梯
-  expect(await page.evaluate(() => window.__GAME__.interaction.entries.size)).toBe(6);
+  // Earth 交互项 = 6 个原有（小满/展厅/M-07/A-12/引导员/电梯）+ GLB 模型的 20 个
+  // （中央文明塔 + 磁悬浮网络代理点 + 18 架飞行器）= 26；只约束下界，给资产调整留弹性
+  expect(await page.evaluate(() => window.__GAME__.interaction.entries.size)).toBeGreaterThanOrEqual(24);
+  // 关键交互对象仍然存在且可寻址
+  for (const name of ['earth-interaction', 'moon-portal', 'INTERACT_CentralSpire', 'INTERACT_TransitNetwork']) {
+    expect(await page.evaluate((n) => Boolean(window.__GAME__.sceneManager.getCurrentScene().scene.getObjectByName(n)), name)).toBe(true);
+  }
   expect(errors).toEqual([]);
 });
 

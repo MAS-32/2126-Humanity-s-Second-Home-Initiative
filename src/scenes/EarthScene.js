@@ -11,6 +11,7 @@ import { createAscent } from './earth/ascent.js';
 import { createDialogue, createBranchDialogue } from './earth/dialogue.js';
 import { createGuide } from './earth/guide.js';
 import { makeNameTag } from './earth/nametag.js';
+import { loadFutureCity } from './earth/futureCity.js';
 
 // 2126：人类第二家园计划 · 第一关「地球」。
 // 体验链：中央广场出生（第三人称操控星达）→ 小满/NPC 对话 → 深空规划馆 → 太空电梯
@@ -48,6 +49,23 @@ export function createEarthScene(ctx) {
   const elevator = buildSpaceElevator(scene);
   const npcs = buildNpcs(scene);
   const ascent = createAscent({ ctx, scene, avatar: xingda.group });
+
+  // GLB 未来城市（真实建模资产）：异步加载，成功后接管城市视觉并切换碰撞/相机避障；
+  // 失败时保留程序化城市，游戏照常进行。
+  const futureCity = loadFutureCity({
+    ctx,
+    scene,
+    onLoaded({ colliders, cameraBlockers }) {
+      city.setDecoVisible(false);
+      ctx.player.setObstacles?.(
+        [...city.keepColliders, hall.collider, elevator.collider, ...colliders].filter(Boolean),
+      );
+      ctx.player.setCameraObstacles?.(
+        [...cameraBlockers, hall.blocker, elevator.blocker].filter(Boolean),
+      );
+      ctx.ui.flash('2126 城市模型加载完成');
+    },
+  });
 
   // 地标名牌（展厅与电梯入口上方）
   const hallTag = makeNameTag('深空规划馆');
@@ -197,6 +215,7 @@ export function createEarthScene(ctx) {
       elevator.update(dt);
       npcs.update(dt);
       guide.update(dt);
+      futureCity.update(dt);
       ascent.update(dt);
     },
 
@@ -208,6 +227,7 @@ export function createEarthScene(ctx) {
       a12Dialogue.destroy();
       guideDialogue.destroy();
       ascent.dispose();
+      futureCity.dispose();
     },
 
     dispose() {
@@ -217,6 +237,7 @@ export function createEarthScene(ctx) {
       a12Dialogue.destroy();
       guideDialogue.destroy();
       ascent.dispose();
+      futureCity.dispose();
       guide.dispose();
       document.body.classList.remove('earth-tp');
       // 归还 Core：清掉 Earth 注入的第三人称状态，避免泄漏到 Moon/Mars

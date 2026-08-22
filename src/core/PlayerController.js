@@ -125,6 +125,11 @@ export class PlayerController {
     this.obstacles = Array.isArray(obstacles) ? obstacles : [];
   }
 
+  /** 更新第三人称相机避障列表（如 GLB 城市异步加载完成后替换避让对象）。 */
+  setCameraObstacles(obstacles) {
+    if (this.tp) this.tp.cameraObstacles = Array.isArray(obstacles) ? obstacles : null;
+  }
+
   snapCameraToTarget() {
     if (!this.tp) return;
     const desired = this.getDesiredCameraPosition(new THREE.Vector3());

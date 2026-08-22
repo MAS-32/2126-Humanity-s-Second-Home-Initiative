@@ -56,6 +56,11 @@ function glowMaterial(color, opacity) {
 
 export function buildCity(scene) {
   const rand = mulberry32(2126);
+  // 程序化城市分两层：deco（装饰性城市视觉——GLB 城市加载成功后整体隐藏）
+  // 与 keep（功能性内容：大地面、气象站、农场塔——始终保留，NPC 与玩法依赖）。
+  const deco = new THREE.Group();
+  deco.name = 'city-deco';
+  scene.add(deco);
 
   const silver = new THREE.MeshStandardMaterial({ color: 0xeef4f6, roughness: 0.35, metalness: 0.25 });
   const white = new THREE.MeshStandardMaterial({ color: 0xf6fafb, roughness: 0.5, metalness: 0.1 });
@@ -68,7 +73,7 @@ export function buildCity(scene) {
     new THREE.MeshStandardMaterial({ color: 0xdbe6ea, roughness: 0.95 }),
   );
   ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
+  scene.add(ground); // 大地面保留在 keep 层：GLB 地面覆盖范围有限，用它兜底
 
   const plaza = new THREE.Mesh(
     new THREE.CircleGeometry(14, 48),
@@ -76,7 +81,7 @@ export function buildCity(scene) {
   );
   plaza.rotation.x = -Math.PI / 2;
   plaza.position.y = 0.02;
-  scene.add(plaza);
+  deco.add(plaza);
 
   // 广场同心光环
   const guideMaterial = glowMaterial(0x39c8dc, 0.8);
@@ -84,7 +89,7 @@ export function buildCity(scene) {
     const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.18, radius, 64), guideMaterial);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.04;
-    scene.add(ring);
+    deco.add(ring);
   });
   // 广场辐射发光辐条（8 条，强化秩序感与方向引导）
   for (let i = 0; i < 8; i += 1) {
@@ -93,7 +98,7 @@ export function buildCity(scene) {
     spoke.rotation.x = -Math.PI / 2;
     spoke.rotation.z = -bearing;
     spoke.position.set(Math.sin(bearing) * 8.8, 0.045, Math.cos(bearing) * 8.8);
-    scene.add(spoke);
+    deco.add(spoke);
   }
   // 广场外圈灌木绿环（生态点缀：科技系统与生态协同）
   const hedge = new THREE.Mesh(
@@ -103,7 +108,7 @@ export function buildCity(scene) {
   hedge.rotation.x = Math.PI / 2;
   hedge.scale.y = 0.55;
   hedge.position.y = 0.28;
-  scene.add(hedge);
+  deco.add(hedge);
   // 生态水池（广场东南侧，青色半透明）
   const pool = new THREE.Mesh(
     new THREE.CircleGeometry(3.1, 28),
@@ -111,11 +116,11 @@ export function buildCity(scene) {
   );
   pool.rotation.x = -Math.PI / 2;
   pool.position.set(10.5, 0.03, 9);
-  scene.add(pool);
+  deco.add(pool);
   const poolRim = new THREE.Mesh(new THREE.TorusGeometry(3.1, 0.14, 8, 36), white);
   poolRim.rotation.x = Math.PI / 2;
   poolRim.position.set(10.5, 0.06, 9);
-  scene.add(poolRim);
+  deco.add(poolRim);
 
   // ---- 环形路网（城市即系统的秩序感）----
   const ringRoadMaterial = glowMaterial(0x2fb7cf, 0.4);
@@ -123,7 +128,7 @@ export function buildCity(scene) {
     const road = new THREE.Mesh(new THREE.RingGeometry(radius - 0.9, radius + 0.9, 96), ringRoadMaterial);
     road.rotation.x = -Math.PI / 2;
     road.position.y = 0.03;
-    scene.add(road);
+    deco.add(road);
   });
 
   // ---- 辐射道路 ----
@@ -135,7 +140,7 @@ export function buildCity(scene) {
     road.rotation.z = -bearing;
     const mid = 14 + length / 2;
     road.position.set(Math.sin(bearing) * mid, 0.035, Math.cos(bearing) * mid);
-    scene.add(road);
+    deco.add(road);
   });
 
   // ---- 中央天枢塔（城市调度中枢，标志性垂直地标，参考图 C 位）----
@@ -178,7 +183,7 @@ export function buildCity(scene) {
   deckGlow.rotation.x = Math.PI / 2;
   deckGlow.position.y = 12.75;
   tower.add(deckGlow);
-  scene.add(tower);
+  deco.add(tower);
 
   // ---- 流线型主塔群（6 座，Lathe 曲线收分 + 发光腰带）----
   const mainTowerBearings = [0.6, 1.5, 2.5, 3.6, 4.6, 5.5];
@@ -214,7 +219,7 @@ export function buildCity(scene) {
     belt.rotation.x = Math.PI / 2;
     belt.position.y = height * 0.62;
     g.add(belt);
-    scene.add(g);
+    deco.add(g);
     mainTowerTops.push({ x, z, height, group: g });
   });
   // 空中连桥（相邻主塔之间的细梁 + 发光下沿，立体城市感）
@@ -228,11 +233,11 @@ export function buildCity(scene) {
     const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, len), white);
     bridge.position.set(midX, bridgeY, midZ);
     bridge.lookAt(b.x, bridgeY, b.z);
-    scene.add(bridge);
+    deco.add(bridge);
     const glowStrip = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, len), cyanGlow);
     glowStrip.position.set(midX, bridgeY - 0.29, midZ);
     glowStrip.lookAt(b.x, bridgeY - 0.29, b.z);
-    scene.add(glowStrip);
+    deco.add(glowStrip);
   }
 
   // ---- 中层建筑群 ----
@@ -262,20 +267,20 @@ export function buildCity(scene) {
     );
     body.position.set(x, height / 2, z);
     body.rotation.y = rand() * Math.PI;
-    scene.add(body);
+    deco.add(body);
 
     if (rand() > 0.3) {
       const strip = new THREE.Mesh(new THREE.BoxGeometry(width * 0.9, 0.26, depth + 0.06), windowMaterial);
       strip.position.set(x, height * (0.35 + rand() * 0.45), z);
       strip.rotation.y = body.rotation.y;
-      scene.add(strip);
+      deco.add(strip);
     }
     // 约 1/3 的中层建筑加圆顶冠，打破“平顶方盒”重复感
     if (rand() > 0.66) {
       const crown = new THREE.Mesh(new THREE.SphereGeometry(Math.min(width, depth) * 0.42, 10, 8), silver);
       crown.scale.y = 0.6;
       crown.position.set(x, height + 0.1, z);
-      scene.add(crown);
+      deco.add(crown);
     }
     built += 1;
   }
@@ -288,7 +293,7 @@ export function buildCity(scene) {
     const height = 16 + rand() * 26;
     const slab = new THREE.Mesh(new THREE.BoxGeometry(3 + rand() * 3, height, 3 + rand() * 3), skylineMaterial);
     slab.position.set(Math.sin(bearing) * radius, height / 2, Math.cos(bearing) * radius);
-    scene.add(slab);
+    deco.add(slab);
   }
 
   // ---- 双层空中交通环 + 支撑塔 ----
@@ -299,12 +304,12 @@ export function buildCity(scene) {
     const rail = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.32, 8, 96), new THREE.MeshBasicMaterial({ color: 0x54d6e6 }));
     rail.rotation.x = Math.PI / 2;
     rail.position.y = y;
-    scene.add(rail);
+    deco.add(rail);
     for (let i = 0; i < 6; i += 1) {
       const b = (i / 6) * Math.PI * 2;
       const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, y, 6), silver);
       pylon.position.set(Math.sin(b) * radius, y / 2, Math.cos(b) * radius);
-      scene.add(pylon);
+      deco.add(pylon);
     }
   });
 
@@ -322,7 +327,7 @@ export function buildCity(scene) {
       speed: (0.06 + rand() * 0.1) * (rand() > 0.5 ? 1 : -1),
       angle: rand() * Math.PI * 2,
     });
-    scene.add(craft);
+    deco.add(craft);
   }
 
   // ---- 能源塔（暖橙点缀）----
@@ -330,10 +335,10 @@ export function buildCity(scene) {
   [[52, 18], [60, -6], [48, -46]].forEach(([x, z]) => {
     const spireMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.6, 26, 6), white);
     spireMesh.position.set(x, 13, z);
-    scene.add(spireMesh);
+    deco.add(spireMesh);
     const tip = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 10), warmGlow);
     tip.position.set(x, 27, z);
-    scene.add(tip);
+    deco.add(tip);
     tips.push(tip);
   });
 
@@ -349,7 +354,7 @@ export function buildCity(scene) {
   dish.position.y = 5.1;
   dish.rotation.x = Math.PI / 3;
   weather.add(dish);
-  scene.add(weather);
+  scene.add(weather); // keep：M-07 值守的功能建筑
 
   // ---- 垂直农场塔（A-12 值守）：玻璃绿塔 + 层叠种植环 ----
   const farm = new THREE.Group();
@@ -367,7 +372,7 @@ export function buildCity(scene) {
     planter.position.y = y;
     farm.add(planter);
   });
-  scene.add(farm);
+  scene.add(farm); // keep：A-12 值守的功能建筑
 
   // ---- 绿植点缀（广场环带 + 南区）----
   const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8a6f52, roughness: 0.9 });
@@ -386,7 +391,7 @@ export function buildCity(scene) {
     const crown = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.6, 8), leafMaterial);
     crown.position.y = 1.6;
     tree.add(crown);
-    scene.add(tree);
+    deco.add(tree);
   }
 
   // ---- 边界光环 ----
@@ -395,24 +400,34 @@ export function buildCity(scene) {
     const bearing = (i / 28) * Math.PI * 2;
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.6, 5), fenceMaterial);
     post.position.set(Math.sin(bearing) * 72, 1.3, Math.cos(bearing) * 72);
-    scene.add(post);
+    deco.add(post);
   }
 
   let elapsed = 0;
+  // keep 层功能建筑的碰撞（始终有效）；deco 层建筑的碰撞仅在程序化城市可见时有意义
+  const keepColliders = [
+    { x: WEATHER_STATION_POS.x, z: WEATHER_STATION_POS.z, r: 2.6 }, // 气象站
+    { x: FARM_TOWER_POS.x, z: FARM_TOWER_POS.z, r: 3.2 }, // 农场塔
+  ];
+  const decoColliders = [
+    { x: TOWER_POS.x, z: TOWER_POS.z, r: 6.2 }, // 中央天枢塔
+    ...mainTowerTops.map(({ x, z }) => ({ x, z, r: 2.9 })), // 主塔群
+    { x: 10.5, z: 9, r: 3.3 }, // 生态水池
+    { x: 52, z: 18, r: 1.8 },
+    { x: 60, z: -6, r: 1.8 },
+    { x: 48, z: -46, r: 1.8 }, // 能源塔
+  ];
   return {
-    // 玩家圆形障碍（简单推挤碰撞，只覆盖主要不可穿越建筑）
-    colliders: [
-      { x: TOWER_POS.x, z: TOWER_POS.z, r: 6.2 }, // 中央天枢塔
-      ...mainTowerTops.map(({ x, z }) => ({ x, z, r: 2.9 })), // 主塔群
-      { x: WEATHER_STATION_POS.x, z: WEATHER_STATION_POS.z, r: 2.6 }, // 气象站
-      { x: FARM_TOWER_POS.x, z: FARM_TOWER_POS.z, r: 3.2 }, // 农场塔
-      { x: 10.5, z: 9, r: 3.3 }, // 生态水池
-      { x: 52, z: 18, r: 1.8 },
-      { x: 60, z: -6, r: 1.8 },
-      { x: 48, z: -46, r: 1.8 }, // 能源塔
-    ],
+    // 默认（GLB 未加载）：全部障碍；GLB 城市接管视觉后改用 keepColliders + GLB 障碍
+    colliders: [...decoColliders, ...keepColliders],
+    keepColliders,
+    decoColliders,
     // 相机避障对象（体量足以遮挡第三人称机位的建筑）
     cameraBlockers: [tower, ...mainTowerTops.map(({ group }) => group)],
+    /** GLB 城市加载成功后隐藏程序化装饰层（保留地面/气象站/农场塔） */
+    setDecoVisible(visible) {
+      deco.visible = Boolean(visible);
+    },
     update(dt) {
       elapsed += dt;
       crafts.forEach((craft) => {
