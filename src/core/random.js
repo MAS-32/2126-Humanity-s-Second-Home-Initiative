@@ -1,0 +1,39 @@
+/* 随机数 & 噪声
+ * 《2126：人类第二家园计划》· 火星子模块
+ * 源自单体原型 index.html L319-351，模块化拆分后保持行为等价。
+ */
+
+/* ================= 随机数 & 噪声 ================= */
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const rand = mulberry32(2126);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const sstep = (a,b,x)=>{ const t = clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
+
+const grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+const pBase = new Uint8Array(256); for(let i=0;i<256;i++) pBase[i]=i;
+for(let i=255;i>0;i--){ const j=(rand()*(i+1))|0; const t=pBase[i]; pBase[i]=pBase[j]; pBase[j]=t; }
+const perm = new Uint8Array(512), permMod12 = new Uint8Array(512);
+for(let i=0;i<512;i++){ perm[i]=pBase[i&255]; permMod12[i]=perm[i]%12; }
+const F3=1/3, G3=1/6;
+function snoise(x,y,z){
+  const s=(x+y+z)*F3, i=Math.floor(x+s), j=Math.floor(y+s), k=Math.floor(z+s);
+  const t=(i+j+k)*G3, x0=x-(i-t), y0=y-(j-t), z0=z-(k-t);
+  let i1,j1,k1,i2,j2,k2;
+  if(x0>=y0){ if(y0>=z0){i1=1;j1=0;k1=0;i2=1;j2=1;k2=0;} else if(x0>=z0){i1=1;j1=0;k1=0;i2=1;j2=0;k2=1;} else {i1=0;j1=0;k1=1;i2=1;j2=0;k2=1;} }
+  else { if(y0<z0){i1=0;j1=0;k1=1;i2=0;j2=1;k2=1;} else if(x0<z0){i1=0;j1=1;k1=0;i2=0;j2=1;k2=1;} else {i1=0;j1=1;k1=0;i2=1;j2=1;k2=0;} }
+  const x1=x0-i1+G3,y1=y0-j1+G3,z1=z0-k1+G3, x2=x0-i2+2*G3,y2=y0-j2+2*G3,z2=z0-k2+2*G3, x3=x0-1+3*G3,y3=y0-1+3*G3,z3=z0-1+3*G3;
+  const ii=i&255, jj=j&255, kk=k&255;
+  let n=0, t0=0.6-x0*x0-y0*y0-z0*z0;
+  if(t0>0){ const g=grad3[permMod12[ii+perm[jj+perm[kk]]]]; t0*=t0; n+=t0*t0*(g[0]*x0+g[1]*y0+g[2]*z0); }
+  let t1=0.6-x1*x1-y1*y1-z1*z1;
+  if(t1>0){ const g=grad3[permMod12[ii+i1+perm[jj+j1+perm[kk+k1]]]]; t1*=t1; n+=t1*t1*(g[0]*x1+g[1]*y1+g[2]*z1); }
+  let t2=0.6-x2*x2-y2*y2-z2*z2;
+  if(t2>0){ const g=grad3[permMod12[ii+i2+perm[jj+j2+perm[kk+k2]]]]; t2*=t2; n+=t2*t2*(g[0]*x2+g[1]*y2+g[2]*z2); }
+  let t3=0.6-x3*x3-y3*y3-z3*z3;
+  if(t3>0){ const g=grad3[permMod12[ii+1+perm[jj+1+perm[kk+1]]]]; t3*=t3; n+=t3*t3*(g[0]*x3+g[1]*y3+g[2]*z3); }
+  return 32*n;
+}
+function fbm(x,y,z,oct){ let a=0, amp=0.5, f=1; for(let o=0;o<oct;o++){ a+=amp*snoise(x*f,y*f,z*f); amp*=0.5; f*=2.03; } return a; }
+
+export { mulberry32, rand, clamp, sstep, pBase, snoise, fbm };

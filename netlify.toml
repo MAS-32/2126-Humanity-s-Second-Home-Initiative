@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA 回退：保证刷新/直链指向 index.html（本模块为单页，刷新本就正常，此处为稳健冗余）
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
