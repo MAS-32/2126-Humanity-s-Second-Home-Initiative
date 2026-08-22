@@ -12,21 +12,25 @@ import { createDialogue, createBranchDialogue } from './earth/dialogue.js';
 import { createGuide } from './earth/guide.js';
 import { makeNameTag } from './earth/nametag.js';
 import { loadFutureCity } from './earth/futureCity.js';
+import { createEarthAudio } from './earth/audio.js';
 
 // 2126：人类第二家园计划 · 第一关「地球」。
 // 体验链：中央广场出生（第三人称操控星达）→ 小满/NPC 对话 → 深空规划馆 → 太空电梯
 // → 地月上升演出 → sceneManager.go('moon')。本场景只消费 Shared Core 注入的 ctx。
 
 const XIAOMAN_LINES = [
-  '你好呀，我是小满，这座城市的陪伴型 AI。哇，星达今天也很有精神呢！',
-  '2126 年的城市不只是建筑集合，而是一套由 AI 协调的大型生命维持系统。',
-  '能源与电网：我实时协调聚变电站、太阳能阵列和戴森群送下来的电力，“停电”已经是历史名词。',
-  '交通调度：头顶两条空中环线上的飞行器都由我统一指挥，拥堵这个词早就进博物馆了。',
-  '水资源循环：每一滴水都被回收、净化、再利用，闭环利用率 99.7%。',
-  '常有朋友问我：地球都这么好了，为什么还要去月球和火星？因为我们不是在离开地球，而是在给文明多建几个家呀。',
-  '想了解更多细节？气象站找 M-07，农场塔找 A-12，他们都是这方面的专家。',
-  '想看看人类下一步去哪？去西北边的深空规划馆看看太阳系全息模型，然后到东北边的太空电梯出发——月球见！',
+  '早上好呀星达！我是小满，这座城市的陪伴型 AI。今天天气是我排的，还不错吧？',
+  '你问这座城市为什么这么顺？因为能源、交通、水、空气，都有像我们这样的 AI 在一起协调。',
+  '电是从太阳身边送下来的——戴森群听过吗？所以“停电”这个词，我只在老故事里见过。',
+  '头顶那些飞行器都归交通网统一调度。在 2126 年，“堵车”是博物馆里的词。',
+  '常有人问我：地球都这么好了，为什么还要去月球？因为不是离开呀，是给文明多安几个家。',
+  '想听专业的？气象站找 M-07，农场塔找 A-12，他们都比我懂行。',
+  '想知道人类下一步去哪？去西北边的深空规划馆，看一眼太阳系蓝图就明白了——然后到东北边的太空电梯出发，月球见！',
 ];
+
+const HALL_POS = new THREE.Vector3(-35, 0, -30);
+const ELEVATOR_POS = new THREE.Vector3(35, 0, -35);
+const CITY_CENTER = new THREE.Vector3(0, 0, 0);
 
 export function createEarthScene(ctx) {
   const scene = new THREE.Scene();
@@ -42,19 +46,21 @@ export function createEarthScene(ctx) {
 
   const spawn = new THREE.Vector3(0, 1.7, 5);
 
+  const audio = createEarthAudio();
   const city = buildCity(scene);
   const xingda = buildXingda(scene);
   const robot = buildCompanionRobot(scene);
   const hall = buildCivilizationHall(scene);
   const elevator = buildSpaceElevator(scene);
   const npcs = buildNpcs(scene);
-  const ascent = createAscent({ ctx, scene, avatar: xingda.group });
+  const ascent = createAscent({ ctx, scene, avatar: xingda.group, elevator, audio });
 
   // GLB 未来城市（真实建模资产）：异步加载，成功后接管城市视觉并切换碰撞/相机避障；
   // 失败时保留程序化城市，游戏照常进行。
   const futureCity = loadFutureCity({
     ctx,
     scene,
+    audio,
     onLoaded({ colliders, cameraBlockers }) {
       city.setDecoVisible(false);
       ctx.player.setObstacles?.(
@@ -69,10 +75,10 @@ export function createEarthScene(ctx) {
 
   // 地标名牌（展厅与电梯入口上方）
   const hallTag = makeNameTag('深空规划馆');
-  hallTag.position.set(0, 6.4, 0);
+  hallTag.position.set(0, 8.3, 0);
   hall.consoleObject.parent.add(hallTag);
   const elevatorTag = makeNameTag('太空电梯 · 赤道一号', { color: '#ffd9a0' });
-  elevatorTag.position.set(-5.8, 4.6, 5.8);
+  elevatorTag.position.set(-5.8, 4.9, 5.8);
   elevator.portal.add(elevatorTag);
   const xiaomanTag = makeNameTag('小满 · 城市陪伴 AI', { color: '#b8f7e8' });
   xiaomanTag.position.y = 1.35;
@@ -82,6 +88,11 @@ export function createEarthScene(ctx) {
   xingda.group.position.set(spawn.x, 0, spawn.z);
   ctx.player.setThirdPerson?.({
     target: xingda.group,
+    distance: 5.4,
+    height: 2.5,
+    lookHeight: 1.15,
+    cameraDamping: 8,
+    rotateSensitivity: 0.0021,
     cameraObstacles: [...(city.cameraBlockers ?? []), hall.blocker, elevator.blocker].filter(Boolean),
   });
   ctx.player.setObstacles?.([...(city.colliders ?? []), hall.collider, elevator.collider].filter(Boolean));
@@ -93,24 +104,33 @@ export function createEarthScene(ctx) {
     scene,
     targets: {
       companion: robot.group.position,
-      hall: new THREE.Vector3(-35, 0, -30),
-      elevator: new THREE.Vector3(35, 0, -35),
+      hall: HALL_POS.clone(),
+      elevator: ELEVATOR_POS.clone(),
     },
   });
+
+  // ---- 对话打开状态：对话/演出期间暂停星达的“好奇心观察” ----
+  let dialogueOpen = false;
+  const closeDialogue = () => {
+    dialogueOpen = false;
+    xingda.faceToward(null);
+  };
 
   // ---- 小满：城市陪伴 AI（线性对话）----
   const xiaomanDialogue = createDialogue({
     ctx,
     speaker: '小满 · 城市陪伴 AI',
     lines: XIAOMAN_LINES,
-    onClose() { xingda.faceToward(null); },
+    onClose: closeDialogue,
   });
   ctx.interaction.add(robot.group, {
     text: '与小满交谈',
     distance: 6,
     onInteract() {
+      dialogueOpen = true;
       ctx.state.set('talkedEarthAI', true);
       xingda.faceToward(robot.group.position);
+      audio.play('dialog');
       xiaomanDialogue.open();
     },
   });
@@ -121,14 +141,17 @@ export function createEarthScene(ctx) {
     speaker: NPC_DIALOGUES.hallGuide.speaker,
     greeting: NPC_DIALOGUES.hallGuide.greeting,
     branches: NPC_DIALOGUES.hallGuide.branches,
-    onClose() { xingda.faceToward(null); },
+    onClose: closeDialogue,
   });
   ctx.interaction.add(hall.consoleObject, {
     text: '查看太阳系全息模型',
     distance: 9,
     onInteract() {
+      dialogueOpen = true;
       ctx.state.set('visitedSolarSystem', true);
       xingda.faceToward(hall.consoleObject.getWorldPosition(new THREE.Vector3()));
+      audio.play('hall-on');
+      audio.play('holo');
       hallDialogue.open();
     },
   });
@@ -139,13 +162,15 @@ export function createEarthScene(ctx) {
     speaker: NPC_DIALOGUES.m07.speaker,
     greeting: NPC_DIALOGUES.m07.greeting,
     branches: NPC_DIALOGUES.m07.branches,
-    onClose() { xingda.faceToward(null); },
+    onClose: closeDialogue,
   });
   ctx.interaction.add(npcs.m07, {
     text: '与 M-07 交谈',
     distance: 6.5,
     onInteract() {
+      dialogueOpen = true;
       xingda.faceToward(npcs.m07.position);
+      audio.play('dialog');
       m07Dialogue.open();
     },
   });
@@ -155,13 +180,15 @@ export function createEarthScene(ctx) {
     speaker: NPC_DIALOGUES.a12.speaker,
     greeting: NPC_DIALOGUES.a12.greeting,
     branches: NPC_DIALOGUES.a12.branches,
-    onClose() { xingda.faceToward(null); },
+    onClose: closeDialogue,
   });
   ctx.interaction.add(npcs.a12, {
     text: '与 A-12 交谈',
     distance: 6.5,
     onInteract() {
+      dialogueOpen = true;
       xingda.faceToward(npcs.a12.position);
+      audio.play('dialog');
       a12Dialogue.open();
     },
   });
@@ -172,15 +199,20 @@ export function createEarthScene(ctx) {
     greeting: NPC_DIALOGUES.elevatorGuide.greeting,
     branches: NPC_DIALOGUES.elevatorGuide.branches,
     onAction(action) {
-      if (action === 'startAscent') ascent.start();
+      if (action === 'startAscent') {
+        xingda.faceToward(CITY_CENTER); // 登舱后回望城市与地球
+        ascent.start();
+      }
     },
-    onClose() { xingda.faceToward(null); },
+    onClose: closeDialogue,
   });
   ctx.interaction.add(npcs.guide, {
     text: '与登舱引导员交谈',
     distance: 7,
     onInteract() {
+      dialogueOpen = true;
       xingda.faceToward(npcs.guide.position);
+      audio.play('dialog');
       guideDialogue.open();
     },
   });
@@ -189,8 +221,60 @@ export function createEarthScene(ctx) {
   ctx.interaction.add(elevator.portal, {
     text: '进入太空电梯',
     distance: 12.5,
-    onInteract() { ascent.start(); },
+    onInteract() {
+      xingda.faceToward(CITY_CENTER); // 上升时自然回望地球
+      ascent.start();
+    },
   });
+
+  // ---- 展厅氛围压暗：玩家靠近规划馆时，环境光收敛、全息凸显 ----
+  const ambience = {
+    hemiBase: hemisphere.intensity,
+    sunBase: sunlight.intensity,
+    bgBase: scene.background.clone(),
+    fogBase: scene.fog.color.clone(),
+    bgDim: new THREE.Color(0x5e8698),
+    fogDim: new THREE.Color(0x6f96a8),
+    current: '', // 当前环境音床
+  };
+  const playerPos = new THREE.Vector3();
+  let curiosityKey = '';
+
+  function updateAtmosphere() {
+    if (ctx.player.getPosition) playerPos.copy(ctx.player.getPosition());
+    if (ascent.isActive()) return; // 演出接管天空与音效，氛围系统让位
+    const hallDistance = Math.hypot(playerPos.x - HALL_POS.x, playerPos.z - HALL_POS.z);
+    const factor = THREE.MathUtils.smoothstep(19 - hallDistance, 0, 8); // 19m 外为 0，11m 内为 1
+    hemisphere.intensity = THREE.MathUtils.lerp(ambience.hemiBase, 0.32, factor);
+    sunlight.intensity = THREE.MathUtils.lerp(ambience.sunBase, 0.5, factor);
+    scene.background.lerpColors(ambience.bgBase, ambience.bgDim, factor);
+    if (scene.fog) scene.fog.color.lerpColors(ambience.fogBase, ambience.fogDim, factor);
+    const next = factor > 0.5 ? 'hall' : 'city';
+    if (next !== ambience.current) {
+      ambience.current = next;
+      audio.setAmbience(next);
+    }
+  }
+
+  // ---- 星达的好奇心：空闲靠近重要地标时，自然地转身观察 ----
+  function updateCuriosity() {
+    if (dialogueOpen || ascent.isActive()) return;
+    const hallDistance = Math.hypot(playerPos.x - HALL_POS.x, playerPos.z - HALL_POS.z);
+    const elevatorDistance = Math.hypot(playerPos.x - ELEVATOR_POS.x, playerPos.z - ELEVATOR_POS.z);
+    let nextKey = '';
+    let nextPos = null;
+    if (hallDistance < 16) {
+      nextKey = 'hall';
+      nextPos = HALL_POS;
+    } else if (elevatorDistance < 16) {
+      nextKey = 'elevator';
+      nextPos = ELEVATOR_POS;
+    }
+    if (nextKey !== curiosityKey) {
+      curiosityKey = nextKey;
+      xingda.faceToward(nextPos);
+    }
+  }
 
   return {
     scene,
@@ -198,25 +282,26 @@ export function createEarthScene(ctx) {
 
     enter() {
       ctx.ui.setScene('2126 · 地球');
-      ctx.ui.flash('WASD 移动 · 鼠标环视 · E 交互——跟着发光道路与信标光柱走');
+      ctx.ui.flash('WASD 移动 · 鼠标环视 · E 交互——跟随琥珀色光轨与 ◇ 标记前进');
+      audio.setAmbience('city');
       // 第三人称下隐藏第一人称准星
       document.body.classList.add('earth-tp');
     },
 
     update(dt) {
       city.update(dt);
-      // 演出期间星达的位置由上升序列接管，停止待机动画避免冲突
-      if (!ascent.isActive()) {
-        const moving = Boolean(ctx.player.keys?.size);
-        xingda.update(dt, moving);
-      }
+      // 星达动画只作用于 visualRoot，与演出的 group 位置控制不冲突，全程保持生命感
+      const moving = !ascent.isActive() && Boolean(ctx.player.keys?.size);
+      xingda.update(dt, moving);
       robot.update(dt);
-      hall.update(dt);
+      hall.update(dt, playerPos);
       elevator.update(dt);
       npcs.update(dt);
       guide.update(dt);
       futureCity.update(dt);
       ascent.update(dt);
+      updateAtmosphere();
+      updateCuriosity();
     },
 
     exit() {
@@ -228,6 +313,8 @@ export function createEarthScene(ctx) {
       guideDialogue.destroy();
       ascent.dispose();
       futureCity.dispose();
+      hall.dispose();
+      audio.dispose();
     },
 
     dispose() {
@@ -238,7 +325,9 @@ export function createEarthScene(ctx) {
       guideDialogue.destroy();
       ascent.dispose();
       futureCity.dispose();
+      hall.dispose();
       guide.dispose();
+      audio.dispose();
       // 星达：标记销毁，迟到完成的 GLB 加载会被直接销毁而不再挂载
       xingda.dispose?.();
       document.body.classList.remove('earth-tp');

@@ -17,6 +17,9 @@ const DEFAULT_TP_OPTIONS = {
   moveSpeed: null, // 缺省沿用 speed
   cameraObstacles: null, // 可选：相机避障 mesh 列表（场景注入的主要建筑）
   playerRadius: 0.45, // 角色碰撞半径（配合 setObstacles 推挤）
+  // 相机避障距离平滑：拉近要急（防穿模），恢复要慢（防弹跳感）
+  collisionSnapDamping: 18,
+  collisionRecoverDamping: 4.5,
 };
 
 export class PlayerController {
@@ -104,6 +107,7 @@ export class PlayerController {
     this.mode = 'third-person';
     this.orbitYaw = this.camera.rotation.y;
     this.orbitPitch = this.tp.defaultPitch;
+    this.tpSmoothedDistance = null; // 避障距离平滑状态，切换模式时重置
     // 立即把相机摆到跟随位置，避免切换瞬间视角跳变
     this.snapCameraToTarget();
   }
@@ -112,6 +116,7 @@ export class PlayerController {
   setFirstPerson() {
     this.mode = 'first-person';
     this.tp = null;
+    this.tpSmoothedDistance = null;
     this.obstacles = [];
     this.keys.clear();
     this.camera.rotation.order = 'YXZ';
@@ -221,21 +226,34 @@ export class PlayerController {
 
     // 相机阻尼跟随：帧率无关的指数平滑，目标静止时收敛不抽搐
     const desired = this.getDesiredCameraPosition(new THREE.Vector3());
-    // 相机避障：从注视点向期望机位做 raycast，被建筑挡住则把相机拉近
+    // 相机避障：从注视点向期望机位做 raycast，被建筑挡住则把相机拉近。
+    // 拉近/恢复经过非对称平滑：拉近快（绝不穿模）、恢复慢（不弹跳）。
     if (tp.cameraObstacles?.length) {
       const look = this.getLookTarget(this.tmpLook);
       this.tmpDir.copy(desired).sub(look);
       const fullDistance = this.tmpDir.length();
       if (fullDistance > 1e-4) {
         this.tmpDir.normalize();
+        let clampedDistance = fullDistance;
         this.cameraRaycaster.set(look, this.tmpDir);
         this.cameraRaycaster.far = fullDistance;
         const hits = this.cameraRaycaster.intersectObjects(tp.cameraObstacles, true);
         if (hits.length > 0) {
-          const clamped = Math.max(hits[0].distance - 0.35, 1.2);
-          desired.copy(look).addScaledVector(this.tmpDir, Math.min(clamped, fullDistance));
+          clampedDistance = Math.max(hits[0].distance - 0.35, 1.2);
         }
+        if (this.tpSmoothedDistance == null) this.tpSmoothedDistance = clampedDistance;
+        const smoothing = clampedDistance < this.tpSmoothedDistance
+          ? tp.collisionSnapDamping
+          : tp.collisionRecoverDamping;
+        this.tpSmoothedDistance += (clampedDistance - this.tpSmoothedDistance)
+          * (1 - Math.exp(-smoothing * delta));
+        desired.copy(look).addScaledVector(
+          this.tmpDir,
+          Math.min(this.tpSmoothedDistance, fullDistance),
+        );
       }
+    } else {
+      this.tpSmoothedDistance = null;
     }
     const alpha = 1 - Math.exp(-tp.cameraDamping * delta);
     this.camera.position.lerp(desired, alpha);

@@ -146,6 +146,68 @@
   font-weight: 600;
 }
 
+.earth-objective-sub {
+  margin-top: 3px;
+  color: rgba(255, 217, 160, 0.85);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+/* 太阳系蓝图数据面板：玩家靠近全息模型时出现 */
+.earth-holo-panel {
+  position: fixed;
+  right: 22px;
+  top: 20px;
+  width: min(320px, 68vw);
+  padding: 12px 16px 10px;
+  border: 1px solid rgba(80, 200, 220, 0.4);
+  border-radius: 10px;
+  background: linear-gradient(160deg, rgba(6, 24, 34, 0.78), rgba(8, 38, 50, 0.68));
+  box-shadow: 0 6px 20px rgba(0, 40, 60, 0.3);
+  color: #d8f6fc;
+  font-size: 12.5px;
+  line-height: 1.8;
+  z-index: 20;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.earth-holo-panel.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.earth-holo-panel-title {
+  color: #6fe3f2;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  font-size: 11.5px;
+}
+
+.earth-holo-panel b {
+  color: #ffd9a0;
+}
+
+.earth-holo-panel-next {
+  margin-top: 2px;
+  color: #ffd9a0;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* 穿云阶段的白雾遮罩 */
+.earth-mist {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.95) 0%, rgba(230, 244, 250, 0.85) 60%, rgba(210, 235, 245, 0.7) 100%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 32;
+}
+
 /* 太空电梯演出期间的跳过提示 */
 .earth-skip-hint {
   position: fixed;
