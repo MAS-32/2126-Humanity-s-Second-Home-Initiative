@@ -1,0 +1,2099 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2126 — 月球前哨城市</title>
+<link rel="stylesheet" href="./opening/OpeningScene.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #04070d; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  :root{
+    --cyan: #7fe9ff;
+    --cyan-dim: rgba(127,233,255,0.55);
+    --ink: rgba(220,240,255,0.88);
+    --font: -apple-system, "SF Pro Display", "Helvetica Neue", "PingFang SC", sans-serif;
+  }
+
+  .hud{
+    position: fixed; z-index: 10; color: var(--ink);
+    font-family: var(--font); pointer-events: none; user-select: none;
+  }
+  .hud-top-left{
+    top: 30px; left: 34px; font-size: 11px; letter-spacing: 0.34em;
+    text-transform: uppercase; opacity: 0; animation: fadein 2.2s ease .6s forwards;
+  }
+  .hud-top-left .sub{ margin-top: 6px; font-size: 9px; letter-spacing: .45em; color: rgba(127,233,255,.45); }
+  .hud-coords{
+    top: 30px; right: 34px; font-size: 9px; letter-spacing: .2em; text-align: right;
+    color: rgba(127,233,255,.4); font-variant-numeric: tabular-nums;
+    opacity: 0; animation: fadein 2.2s ease 1s forwards;
+  }
+
+  /* 任务面板 */
+  .task-panel{
+    position: fixed; top: 78px; left: 34px; z-index: 11; width: 232px;
+    font-family: var(--font); color: var(--ink);
+    background: linear-gradient(180deg, rgba(10,20,34,.62), rgba(8,14,26,.42));
+    border: 1px solid rgba(127,233,255,.22); border-radius: 12px;
+    padding: 14px 16px 12px; backdrop-filter: blur(6px);
+    opacity: 0; animation: fadein 1.6s ease 1.4s forwards; pointer-events: none;
+  }
+  .task-panel .ttl{ font-size: 10px; letter-spacing: .35em; text-transform: uppercase; color: var(--cyan); }
+  .task-panel .prog{ float: right; font-size: 10px; color: rgba(220,240,255,.6); font-variant-numeric: tabular-nums; }
+  .task-panel ul{ list-style: none; margin-top: 10px; }
+  .task-panel li{ font-size: 11.5px; line-height: 1.9; color: rgba(220,240,255,.7); display: flex; align-items: center; gap: 8px; }
+  .task-panel li .dot{
+    width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+    border: 1px solid rgba(127,233,255,.5); background: transparent; transition: .3s;
+  }
+  .task-panel li.done{ color: rgba(127,233,255,.85); }
+  .task-panel li.done .dot{ background: var(--cyan); box-shadow: 0 0 8px var(--cyan); border-color: var(--cyan); }
+  .task-panel li .name{ transition: .3s; }
+  .task-panel li.next .name{ color: var(--cyan); }
+  .task-panel li.next .name::before{ content: '→ '; }
+  .task-panel li.next .dot{ border-color: var(--cyan); animation: pulseDot 1.6s ease-in-out infinite; }
+  @keyframes pulseDot { 0%,100%{ box-shadow: 0 0 2px rgba(127,233,255,.3);} 50%{ box-shadow: 0 0 10px var(--cyan);} }
+
+  /* 准星（仅在指针锁定 / 游戏进行中显示） */
+  .crosshair{
+    position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px;
+    border-radius: 50%; background: rgba(127,233,255,.85); box-shadow: 0 0 8px var(--cyan);
+    z-index: 9; pointer-events: none; opacity: 0; transition: opacity .2s;
+  }
+  .crosshair.on{ opacity: 1; }
+
+  /* 交互提示 */
+  .prompt{
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    z-index: 11; font-family: var(--font); color: #04121f;
+    background: var(--cyan); padding: 7px 16px; border-radius: 20px;
+    font-size: 12px; letter-spacing: .12em; font-weight: 600;
+    box-shadow: 0 0 22px rgba(127,233,255,.55); opacity: 0; transition: opacity .18s;
+    pointer-events: none;
+  }
+  .prompt.show{ opacity: 1; }
+
+  /* 信息面板（对话框） */
+  .info-panel{
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.96);
+    width: min(460px, 86vw); z-index: 13; font-family: var(--font);
+    background: linear-gradient(180deg, rgba(12,22,38,.96), rgba(8,15,28,.96));
+    border: 1px solid rgba(127,233,255,.35); border-radius: 16px;
+    box-shadow: 0 0 60px rgba(0,0,0,.6), inset 0 0 30px rgba(127,233,255,.06);
+    padding: 22px 24px 20px; color: var(--ink); opacity: 0; pointer-events: none;
+    transition: opacity .25s, transform .25s;
+  }
+  .info-panel.show{ opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+  .info-panel .itag{
+    display: inline-block; font-size: 9px; letter-spacing: .3em; text-transform: uppercase;
+    color: #04121f; background: var(--cyan); padding: 3px 10px; border-radius: 10px; margin-bottom: 12px;
+  }
+  .info-panel h2{ font-size: 18px; font-weight: 500; letter-spacing: .04em; margin-bottom: 12px; }
+  .info-panel p{ font-size: 13px; line-height: 1.85; color: rgba(220,240,255,.78); white-space: pre-line; }
+  .info-panel .close{
+    margin-top: 18px; text-align: right; font-size: 11px; letter-spacing: .2em; color: var(--cyan-dim);
+    cursor: pointer;
+  }
+  .info-panel .close:hover{ color: var(--cyan); }
+
+  /* 起始遮罩 */
+  .start-overlay{
+    position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px; text-align: center;
+    background: radial-gradient(ellipse at center, rgba(8,16,30,.55), rgba(2,5,11,.92));
+    font-family: var(--font); color: var(--ink); cursor: pointer; transition: opacity .5s;
+  }
+  .start-overlay.hide{ opacity: 0; pointer-events: none; }
+  .start-overlay .big{ font-size: 30px; font-weight: 300; letter-spacing: .5em; text-indent: .5em; color: #fff; }
+  .start-overlay .mid{ font-size: 13px; letter-spacing: .25em; color: var(--cyan); }
+  .start-overlay .keys{ font-size: 11px; letter-spacing: .14em; color: rgba(220,240,255,.6); line-height: 2; margin-top: 6px; }
+  .start-overlay .enter{
+    margin-top: 10px; font-size: 12px; letter-spacing: .3em; color: #04121f; background: var(--cyan);
+    padding: 11px 26px; border-radius: 24px; box-shadow: 0 0 26px rgba(127,233,255,.5);
+  }
+
+  /* 返回按钮 */
+  .back-btn{
+    position: fixed; bottom: 26px; right: 30px; z-index: 12; font-family: var(--font);
+    font-size: 11px; letter-spacing: .18em; color: var(--cyan); cursor: pointer;
+    border: 1px solid rgba(127,233,255,.3); border-radius: 18px; padding: 8px 16px;
+    background: rgba(8,16,30,.5); backdrop-filter: blur(4px); pointer-events: auto;
+    opacity: 0; animation: fadein 1.4s ease 1.2s forwards;
+  }
+  .back-btn:hover{ background: rgba(127,233,255,.12); }
+
+  /* 完成提示 */
+  .toast{
+    position: fixed; left: 50%; top: 16%; transform: translateX(-50%) translateY(-10px);
+    z-index: 14; font-family: var(--font); color: #04121f; background: var(--cyan);
+    font-size: 13px; letter-spacing: .16em; padding: 10px 22px; border-radius: 22px;
+    box-shadow: 0 0 30px rgba(127,233,255,.6); opacity: 0; transition: opacity .4s, transform .4s;
+    pointer-events: none;
+  }
+  .toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .vignette{ position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,.5) 100%); }
+
+  /* 暂停菜单（ESC） */
+  .pause-menu{
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    z-index: 16; width: min(340px, 84vw); text-align: center;
+    font-family: var(--font); color: var(--ink);
+    background: linear-gradient(180deg, rgba(10,19,32,.92), rgba(6,11,22,.92));
+    border: 1px solid rgba(127,233,255,.3); border-radius: 18px;
+    box-shadow: 0 0 60px rgba(0,0,0,.65), inset 0 0 30px rgba(127,233,255,.05);
+    padding: 30px 28px 26px; backdrop-filter: blur(8px);
+    opacity: 0; pointer-events: none; transition: opacity .22s;
+  }
+  .pause-menu.show{ opacity: 1; pointer-events: auto; }
+  .pause-menu .p-ttl{ font-size: 15px; letter-spacing: .4em; text-indent: .4em; color: #fff; font-weight: 300; }
+  .pause-menu .p-sub{ margin-top: 10px; font-size: 10px; letter-spacing: .3em; color: rgba(127,233,255,.6); }
+  .pause-menu .p-btn{
+    margin-top: 14px; font-size: 12px; letter-spacing: .3em; text-indent: .3em; cursor: pointer;
+    padding: 12px 0; border-radius: 24px; border: 1px solid rgba(127,233,255,.4);
+    color: #04121f; background: var(--cyan); box-shadow: 0 0 20px rgba(127,233,255,.35);
+    transition: .2s;
+  }
+  .pause-menu .p-btn:hover{ box-shadow: 0 0 30px rgba(127,233,255,.6); }
+  .pause-menu .p-btn.dim{
+    background: transparent; color: var(--cyan-dim); box-shadow: none;
+  }
+  .pause-menu .p-btn.dim:hover{ color: var(--cyan); background: rgba(127,233,255,.1); }
+
+  /* 信息面板动作按钮（ACTION FIRST） */
+  .ia-btn{
+    display: inline-block; margin: 14px 8px 0 0; font-size: 11px; letter-spacing: .18em;
+    color: #04121f; background: var(--cyan); padding: 9px 18px; border-radius: 16px;
+    cursor: pointer; box-shadow: 0 0 16px rgba(127,233,255,.35); transition: .18s;
+  }
+  .ia-btn:hover{ box-shadow: 0 0 26px rgba(127,233,255,.6); }
+  .ia-btn.dim{ background: transparent; color: var(--cyan-dim); border: 1px solid rgba(127,233,255,.3); box-shadow: none; }
+  .ia-btn.dim:hover{ color: var(--cyan); background: rgba(127,233,255,.1); }
+  .ia-btn.warm{ background: #ffd27f; box-shadow: 0 0 16px rgba(255,210,127,.35); }
+  .ia-state{ margin-top: 10px; font-size: 11px; letter-spacing: .14em; color: rgba(127,233,255,.75); line-height: 2; }
+  .ia-state .ok{ color: #7affb0; }
+  .ia-state .lock{ color: rgba(220,240,255,.4); }
+
+  /* 轨道交通目的地 UI */
+  .transit-ui{
+    position: fixed; left: 50%; bottom: 15%; transform: translateX(-50%);
+    z-index: 12; font-family: var(--font); text-align: center;
+    background: linear-gradient(180deg, rgba(10,19,32,.9), rgba(6,11,22,.85));
+    border: 1px solid rgba(127,233,255,.3); border-radius: 14px;
+    padding: 14px 20px 16px; color: var(--ink);
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .transit-ui.show{ opacity: 1; }
+  .transit-ui .t-ttl{ font-size: 9px; letter-spacing: .3em; color: var(--cyan); margin-bottom: 10px; }
+  .transit-ui .t-dest{
+    display: inline-block; margin: 0 5px; font-size: 11px; letter-spacing: .1em;
+    border: 1px solid rgba(127,233,255,.35); border-radius: 12px; padding: 7px 13px;
+    color: var(--ink);
+  }
+  .transit-ui .t-dest b{ color: var(--cyan); margin-right: 6px; }
+  .transit-ui .t-dest.here{ opacity: .3; }
+
+  /* ===== 小任务板（当前任务） ===== */
+  .task-panel{ width: 250px; }
+  .task-panel .mq-name{ margin-top: 10px; font-size: 15px; font-weight: 600; color: #fff; letter-spacing: .04em; }
+  .task-panel .mq-sub{ margin-top: 5px; font-size: 11.5px; color: rgba(220,240,255,.68); line-height: 1.6; }
+  .task-panel .mq-dir{ margin-top: 8px; font-size: 11px; color: var(--cyan); letter-spacing: .1em; font-variant-numeric: tabular-nums; min-height: 14px; }
+
+  /* ===== 大任务板（TAB） ===== */
+  .quest-board{
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%) scale(.97);
+    width: min(520px, 88vw); z-index: 15; font-family: var(--font); color: var(--ink);
+    background: linear-gradient(180deg, rgba(10,19,34,.96), rgba(7,13,26,.96));
+    border: 1px solid rgba(127,233,255,.4); border-radius: 18px;
+    box-shadow: 0 0 70px rgba(0,0,0,.7), inset 0 0 40px rgba(127,233,255,.05);
+    padding: 28px 32px 24px; backdrop-filter: blur(10px);
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+  }
+  .quest-board.show{ opacity: 1; transform: translate(-50%,-50%) scale(1); pointer-events: auto; }
+  .quest-board .qb-title{ font-size: 22px; font-weight: 600; letter-spacing: .1em; color: #fff; }
+  .quest-board .qb-sub{ margin-top: 6px; font-size: 12px; letter-spacing: .12em; color: var(--cyan); }
+  .quest-board .qb-prog{ margin-top: 14px; font-size: 11px; letter-spacing: .25em; color: rgba(127,233,255,.7); }
+  .quest-board ul{ list-style: none; margin-top: 8px; }
+  .quest-board li{ display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 2.2; color: rgba(220,240,255,.75); }
+  .quest-board li .dot{ width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(127,233,255,.5); flex: 0 0 auto; transition: .3s; }
+  .quest-board li.done{ color: rgba(127,255,176,.8); }
+  .quest-board li.done .dot{ background: #7affb0; border-color: #7affb0; box-shadow: 0 0 8px #7affb0; }
+  .quest-board li.next .name{ color: #fff; font-weight: 600; }
+  .quest-board li.next .dot{ border-color: var(--cyan); animation: pulseDot 1.6s ease-in-out infinite; }
+  .quest-board li .en{ margin-left: auto; font-size: 10px; letter-spacing: .12em; color: rgba(220,240,255,.35); }
+  .quest-board .qb-next{ margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(127,233,255,.18); font-size: 12px; color: var(--cyan); }
+  .quest-board .qb-tip{ margin-top: 10px; font-size: 10px; letter-spacing: .2em; color: rgba(220,240,255,.4); text-align: right; }
+
+  /* ===== 任务中心入口（右上常驻，点击展开大任务板） ===== */
+  .task-entry{
+    position: fixed; top: 88px; right: 34px; z-index: 14; cursor: pointer;
+    display: flex; align-items: center; gap: 10px; pointer-events: auto;
+    font-family: var(--font); color: var(--ink);
+    background: linear-gradient(180deg, rgba(10,20,34,.62), rgba(8,14,26,.42));
+    border: 1px solid rgba(127,233,255,.28); border-radius: 999px;
+    padding: 9px 18px; backdrop-filter: blur(6px);
+    opacity: 0; animation: fadein 1.6s ease 1.5s forwards;
+    transition: border-color .2s, box-shadow .2s, transform .15s;
+  }
+  .task-entry:hover{ border-color: rgba(127,233,255,.65); box-shadow: 0 0 18px rgba(127,233,255,.18); transform: translateY(-1px); }
+  .task-entry .te-label{ font-size: 12px; letter-spacing: .22em; color: var(--cyan); }
+  .task-entry .te-prog{ font-size: 12px; letter-spacing: .08em; color: rgba(220,240,255,.88); font-variant-numeric: tabular-nums; }
+  .task-entry .te-arrow{ font-size: 11px; color: rgba(127,233,255,.6); }
+
+  /* 大任务板背板（点击空白处关闭） */
+  .qb-backdrop{
+    position: fixed; inset: 0; z-index: 14; background: rgba(3,7,14,.5);
+    opacity: 0; pointer-events: none; transition: opacity .25s; backdrop-filter: blur(2px);
+  }
+  .qb-backdrop.show{ opacity: 1; pointer-events: auto; }
+  .quest-board .qb-close{
+    position: absolute; top: 14px; right: 16px; width: 30px; height: 30px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 20px; line-height: 1;
+    color: rgba(220,240,255,.5); border: 1px solid rgba(127,233,255,.25); border-radius: 50%;
+    transition: .2s;
+  }
+  .quest-board .qb-close:hover{ color: #fff; border-color: rgba(127,233,255,.65); background: rgba(127,233,255,.08); }
+
+  /* ===== NPC 对话气泡 ===== */
+  .npc-bubble{
+    position: fixed; left: 50%; bottom: 172px; transform: translateX(-50%);
+    max-width: min(420px, 80vw); z-index: 12; font-family: var(--font); color: var(--ink);
+    background: linear-gradient(180deg, rgba(14,24,40,.92), rgba(9,16,30,.92));
+    border: 1px solid rgba(127,233,255,.35); border-radius: 14px; padding: 11px 18px;
+    font-size: 13px; line-height: 1.7; box-shadow: 0 0 30px rgba(0,0,0,.5);
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+  }
+  .npc-bubble.show{ opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+  /* ===== 任务方向光标（屏幕边缘柔和指向，第二层导航） ===== */
+  .guide-arrow{
+    position: fixed; left: 0; top: 0; z-index: 9; pointer-events: none;
+    width: 0; height: 0; opacity: 0; transition: opacity .3s;
+    filter: drop-shadow(0 0 6px rgba(127,233,255,.5));
+  }
+  .guide-arrow.show{ opacity: .8; }
+
+  /* ===== 剧情镜头字幕（短暂接管时展示关键信息） ===== */
+  .cine-cap{
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    z-index: 16; pointer-events: none; text-align: center; font-family: var(--font);
+    color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,.8);
+    opacity: 0; transition: opacity .6s;
+  }
+  .cine-cap.show{ opacity: 1; }
+  .cine-cap .cc-main{ font-size: 24px; font-weight: 600; letter-spacing: .14em; }
+  .cine-cap .cc-sub{ margin-top: 8px; font-size: 12px; letter-spacing: .3em; color: var(--cyan); }
+  .guide-arrow .ga{
+    position: absolute; left: -9px; top: -15px; width: 0; height: 0;
+    border-left: 9px solid transparent; border-right: 9px solid transparent;
+    border-bottom: 15px solid rgba(127,233,255,.85); border-radius: 2px;
+  }
+  .npc-bubble::after{
+    content: ''; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px;
+    background: inherit; border-right: 1px solid rgba(127,233,255,.35); border-bottom: 1px solid rgba(127,233,255,.35);
+    transform: translateX(-50%) rotate(45deg);
+  }
+  .npc-bubble .nb-name{ color: var(--cyan); font-size: 11px; letter-spacing: .15em; margin-bottom: 3px; }
+
+  @keyframes fadein { to { opacity: 1; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="vignette"></div>
+
+<!-- HUD -->
+<div class="hud hud-top-left">月球前哨城市<div class="sub">LUNA OUTPOST 2126 · 人类第一座星际港口</div></div>
+<div class="hud hud-coords" id="coords">月球前哨 · 01 区<br>坐标 — , —<br>重力 0.16g</div>
+
+<!-- 小任务板（左上常驻：当前任务 + 子目标 + 进度 + 方向） -->
+<div class="task-panel" id="miniQuest">
+  <div class="ttl">当前任务 <span class="prog" id="taskProg">0 / 4</span></div>
+  <div class="mq-name" id="mqName">抵达中央基地</div>
+  <div class="mq-sub" id="mqSub">找到城市信息核心</div>
+  <div class="mq-dir" id="mqDir"></div>
+</div>
+
+<!-- 任务中心入口（右上常驻，点击展开大任务板） -->
+<div class="task-entry" id="taskEntry">
+  <span class="te-label">任务中心</span>
+  <span class="te-prog" id="teProg">0 / 4</span>
+  <span class="te-arrow">▸</span>
+</div>
+
+<!-- 大任务板（点击任务中心展开，点击背板或 × 关闭） -->
+<div class="qb-backdrop" id="qbBackdrop"></div>
+<div class="quest-board" id="questBoard">
+  <div class="qb-close" id="qbClose">×</div>
+  <div class="qb-title">月球主线任务</div>
+  <div class="qb-sub">人类迈向星际文明的第一站</div>
+  <div class="qb-prog" id="qbProg">月球主线 0 / 4</div>
+  <ul id="qbList"></ul>
+  <div class="qb-next" id="qbNext"></div>
+  <div class="qb-tip">点击背板或 × 关闭</div>
+</div>
+
+<!-- NPC 对话气泡（two-stage：靠近先出短气泡） -->
+<div class="npc-bubble" id="npcBubble"></div>
+<div class="guide-arrow" id="guideArrow"><div class="ga"></div></div>
+<div class="cine-cap" id="cineCap"></div>
+
+<!-- 准星 + 提示 + 信息面板 -->
+<div class="crosshair"></div>
+<div class="prompt" id="prompt">按 [E] 交互</div>
+<div class="info-panel" id="infoPanel">
+  <span class="itag" id="infoTag">LUNA</span>
+  <h2 id="infoTitle"></h2>
+  <p id="infoBody"></p>
+  <div id="infoActions"></div>
+  <div class="close" id="infoClose">[ E / 点击关闭 ]</div>
+</div>
+
+<!-- 轨道目的地选择（数字键 1-4） -->
+<div class="transit-ui" id="transitUI">
+  <div class="t-ttl">月球轨道交通 · 选择目的地（按数字键）</div>
+  <div id="transitDests"></div>
+</div>
+
+<!-- 完成提示 -->
+<div class="toast" id="toast">月球前哨探索完成 · 下一站：火星</div>
+
+<!-- 暂停菜单（ESC） -->
+<div class="pause-menu" id="pauseMenu">
+  <div class="p-ttl">月球前哨城市</div>
+  <div class="p-sub">探索暂停 · 主线进度 <span id="pauseProg">0 / 4</span></div>
+  <div class="p-btn" id="resumeBtn">继续探索</div>
+  <div class="p-btn dim" id="quitBtn">返回太阳系</div>
+</div>
+
+<!-- 起始遮罩 -->
+<div class="start-overlay" id="startOverlay">
+  <div class="big">月球前哨城市</div>
+  <div class="mid">2126 · 人类迈向星际文明的第一座港口</div>
+  <div class="keys">WASD / 方向键 移动 &nbsp;·&nbsp; 鼠标 转动视角 &nbsp;·&nbsp; E 交互 &nbsp;·&nbsp; V 切换视角 &nbsp;·&nbsp; 空格 跳跃 &nbsp;·&nbsp; J 任务中心 &nbsp;·&nbsp; ESC 暂停</div>
+  <div class="enter">点击进入 · 成为星达</div>
+</div>
+
+<!-- 返回 -->
+<div class="back-btn" id="backBtn">← 返回太阳系</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { XingdaController } from './js/Xingda.js';
+import { SimplexNoise } from 'three/addons/math/SimplexNoise.js';
+
+import { INTERACT_POINTS, STORY_POINTS, QUESTS, COLONIST_QA, STATIONS, INTEGRATION } from './js/MoonConfig.js';
+import { createPalette } from './js/MoonMaterials.js';
+import { createHeightField, buildTerrain, buildRocks, buildMountains } from './js/MoonTerrain.js';
+import { buildInfrastructure } from './js/MoonInfrastructure.js';
+import { buildCentralHub } from './js/CentralHub.js';
+import { buildEcoDome } from './js/EcoDome.js';
+import { buildResearchVillage } from './js/ResearchVillage.js';
+import { buildRocketPort } from './js/RocketPort.js';
+import { buildMarkers } from './js/MoonMarkers.js';
+import { buildCollisionWorld } from './js/MoonColliders.js';
+import { buildCitySystems } from './js/MoonCitySystems.js';
+import { buildTransit } from './js/MoonTransit.js';
+import { buildNPCs } from './js/MoonNPCs.js';
+import { cyl, box, sph } from './js/MoonBuilders.js';
+import { OpeningScene } from './opening/OpeningScene.js';
+
+/* 复用太阳系场景的噪声 GLSL（用于地球 shader） */
+const NOISE_GLSL = /* glsl */`
+vec3 mod289(vec3 x){return x - floor(x * (1.0/289.0)) * 289.0;}
+vec4 mod289(vec4 x){return x - floor(x * (1.0/289.0)) * 289.0;}
+vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(
+        i.z + vec4(0.0, i1.z, i2.z, 1.0))
+      + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+      + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy;
+  vec4 y = y_ * ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.zw, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+float fbm(vec3 p){
+  float f = 0.0; float amp = 0.5;
+  for(int i = 0; i < 5; i++){ f += amp * snoise(p); p = p * 2.03 + vec3(11.3,7.1,5.7); amp *= 0.52; }
+  return f;
+}
+`;
+
+/* ============================================================
+   月球场景主模块
+   视觉构建全部委托给 js/ 下的模块；本类只保留：
+   渲染 / 相机 / 玩家控制 / 交互 / HUD / 任务 / 主循环
+   ============================================================ */
+class MoonScene {
+  constructor(container) {
+    this.container = container;
+    this.simplex = new SimplexNoise();
+    this.updatables = [];          // 每帧回调集合
+    this.points = [];              // 交互点配置
+    this.visited = new Set();
+    this.activePoint = null;
+    this.clock = new THREE.Clock();
+    this.raf = null;
+    this.eyeHeight = 1.7;
+    this.interactRange = 16;
+    this.npcTalkRange = 4.5;       // NPC 第二阶段（E 交谈）触发距离
+    this._dialogueOpen = false;    // NPC 对话是否打开
+    this.bounds = 290;             // 玩家活动半径
+    this.state = 'start';          // start | playing | paused
+    this.panelOpen = false;        // 信息面板打开（指针解锁但非暂停）
+    // 玩家运动
+    this.velocity = new THREE.Vector3();
+    this.verticalVel = 0;
+    this.onGround = true;
+    this.keys = { f:false, b:false, l:false, r:false, jump:false };
+    // 视角系统（默认第三人称，V 切换第一/第三）
+    this.viewMode = 'third';                       // 'third' | 'first'
+    this.viewYaw = 0;                              // 水平环绕角（0 = 朝 -z 中央基地）
+    this.viewPitch = -0.10;                        // 俯仰角
+    this.locked = false;                           // 指针锁定状态
+    this.playerPos = new THREE.Vector3(0, this.eyeHeight, 46);  // 玩家逻辑位置（眼高）
+    // —— FUTURE EXPLORATION CAMERA（按星达实测包围盒 h=2.14 / w=1.17 校准）——
+    // 设计：星达在画面下方中央、完整可识别（含触角），前方保留足够探索空间。
+    // 相机略高于星达头顶并带适度俯角，既能看清角色又能看到前方道路与城市。
+    this.camDist = 5.8;                            // 第三人称目标距离（角色占画面 ~30%，不过小不贴脸）
+    this.camHeight = 3.1;                          // 相机高度（相对脚底，高于触角尖 2.14，适度俯角）
+    this.camLookH = 1.3;                           // 视线落点高度（相对脚底，约在胸口 → 角色落画面下方中央）
+    this.camLookAhead = 1.3;                       // 视线向前推送，露出行进前方道路
+    this.camMinDist = 2.3;                         // 避障最近距离（防止后脑勺贴脸）
+    this.fovThird = 62;                            // 第三人称 FOV（不鱼眼、无广角畸变）
+    this.fovFirst = 66;                            // 第一人称 FOV（略宽，增强临场）
+    // 相机平滑状态：只对"距离 / 高度"做平滑，朝向角直接来自鼠标（1:1，不切角不穿墙）
+    this._camDist = this.camDist;                  // 平滑后的相机距离
+    this._camHeight = this.camHeight;              // 平滑后的相机高度
+    this._lookV = new THREE.Vector3();             // 平滑后的视线落点（内部）
+  }
+
+  // ----------------------------------------------------------
+  // 启动 / 销毁
+  // ----------------------------------------------------------
+  start() {
+    this.initThree();
+    // 共享上下文：高度场 + 材质调色板
+    this.heightAt = createHeightField(this.simplex);
+    this.palette = createPalette();
+    this.ctx = {
+      scene: this.scene, camera: this.camera, renderer: this.renderer,
+      heightAt: this.heightAt, palette: this.palette,
+      updatables: this.updatables, simplex: this.simplex,
+      playerPos: this.playerPos          // NPC 感知玩家（转头/对视）
+    };
+
+    // 简化碰撞世界（视觉负责看，Collider 负责挡）
+    this.collision = buildCollisionWorld(this.heightAt);
+    this.ctx.collision = this.collision;
+
+    this.createStarfield();
+    this.createEarth();
+    buildTerrain(this.ctx);
+    buildRocks(this.ctx);
+    buildMountains(this.ctx);
+    this.createDust();
+    buildInfrastructure(this.ctx);
+    buildCentralHub(this.ctx);
+    buildEcoDome(this.ctx);
+    buildResearchVillage(this.ctx);
+    this.rocket = buildRocketPort(this.ctx);   // 捕获运输舰引用（发射动画用）
+    buildCitySystems(this.ctx);              // 城市功能设施（能源/生命维持/资源/充电）
+    this.transit = buildTransit(this.ctx);   // LUNAR TRANSIT LOOP（默认离线，剧情启动）
+    this.createStoryProps();                 // 剧情终端道具（状态灯/全息标签）
+    this.createInteractivePoints();
+    this.ctx.points = this.points;   // 标记系统读取任务状态
+    buildMarkers(this.ctx);
+    this.xingda = new XingdaController(this.scene);   // 星达玩家化身（第三人称可见）
+    this.npcs = buildNPCs(this.ctx);                  // 月球城市人类 NPC（两阶段对话）
+    this.activeNPC = null;                            // 当前可交谈 NPC
+    this.createGuidance();                            // 任务方向光标 + 目标光柱/光环
+    this._initLaunchFX();                             // 发射特效（烟雾/火光/轰鸣），点火前零开销
+    this.createMotes();                               // 近景漂浮月尘（氛围精修）
+    this.createUI();
+    this.setupControls();
+    this.onResize();
+    window.addEventListener('resize', this.onResize);
+    this.animate();
+  }
+
+  dispose() {
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener('resize', this.onResize);
+    if (this.locked) document.exitPointerLock();
+    this.scene.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(m => { for (const k in m) { if (m[k] && m[k].isTexture) m[k].dispose(); } m.dispose(); });
+      }
+    });
+    this.composer.dispose();
+    this.renderer.dispose();
+    if (this.renderer.domElement.parentNode) this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+  }
+
+  initThree() {
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.24;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.container.appendChild(this.renderer.domElement);
+
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x05080f);
+    this.scene.fog = new THREE.FogExp2(0x070b14, 0.00105);
+
+    this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 6000);
+    // 出生点：入口广场轴线上，面朝中央基地 + 地球（Hero Composition）
+    const sy = this.terrainHeight(0, 46) + this.eyeHeight;
+    this.playerPos.set(0, sy, 46);
+    this.camera.position.set(0, sy + 1.5, 46 + 4.4);
+    this.camera.lookAt(0, 12, 0);
+
+    // 灯光：地球反射冷光 + 远处太阳光
+    this.scene.add(new THREE.HemisphereLight(0xa9c2e2, 0x3a3d45, 0.9));
+    this.scene.add(new THREE.AmbientLight(0x44506a, 0.3));
+    const sun = new THREE.DirectionalLight(0xfff4e6, 2.4);
+    sun.position.set(-140, 210, -170);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -300; sun.shadow.camera.right = 300;
+    sun.shadow.camera.top = 300; sun.shadow.camera.bottom = -300;
+    sun.shadow.camera.near = 10; sun.shadow.camera.far = 800;
+    sun.shadow.bias = -0.0004;
+    this.scene.add(sun);
+    // 地球反照补光（从地球方向来的柔和冷光，让建筑阴面可读）
+    const earthshine = new THREE.DirectionalLight(0x8fb4e6, 0.62);
+    earthshine.position.set(120, 130, 220);
+    this.scene.add(earthshine);
+
+    // 后处理：电影感 Bloom——能源光/窗带/尾焰微微晕开，不吞建筑轮廓
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.58, 0.62, 0.78);
+    this.composer.addPass(this.bloom);
+  }
+
+  // ----------------------------------------------------------
+  // 月球地表高度（委托给 MoonTerrain 高度场，玩家物理与几何一致）
+  // ----------------------------------------------------------
+  terrainHeight(x, z) {
+    return this.heightAt ? this.heightAt(x, z) : 0;
+  }
+
+  // ----------------------------------------------------------
+  // 通用工具
+  // ----------------------------------------------------------
+  glowMat(color = 0x7fe9ff, intensity = 1.6) {
+    return new THREE.MeshStandardMaterial({
+      color: 0x081018, emissive: color, emissiveIntensity: intensity,
+      roughness: 0.4, metalness: 0.1
+    });
+  }
+
+  makeGlowTexture(stops, size = 256) {
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+    for (const [p, col] of stops) g.addColorStop(p, col);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, size, size);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+
+  // ----------------------------------------------------------
+  // 星空背景（冷色调，复用太阳系风格）
+  // ----------------------------------------------------------
+  createStarfield() {
+    const make = (count, rMin, rMax, size) => {
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(count*3), phase = new Float32Array(count), tint = new Float32Array(count*3);
+      for (let i=0;i<count;i++){
+        const r = rMin + Math.random()*(rMax-rMin);
+        const th = Math.random()*Math.PI*2, ph = Math.acos(2*Math.random()-1);
+        pos[i*3] = r*Math.sin(ph)*Math.cos(th); pos[i*3+1] = r*Math.sin(ph)*Math.sin(th); pos[i*3+2] = r*Math.cos(ph);
+        phase[i] = Math.random()*Math.PI*2;
+        const c = Math.random();
+        if (c < 0.7){ tint[i*3]=0.8; tint[i*3+1]=0.9; tint[i*3+2]=1.0; }
+        else if (c < 0.85){ tint[i*3]=1.0; tint[i*3+1]=0.9; tint[i*3+2]=0.8; }
+        else { tint[i*3]=0.85; tint[i*3+1]=0.8; tint[i*3+2]=1.0; }
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+      geo.setAttribute('aPhase', new THREE.BufferAttribute(phase,1));
+      geo.setAttribute('aTint', new THREE.BufferAttribute(tint,3));
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime:{value:0}, uSize:{value:size*this.renderer.getPixelRatio()} },
+        transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+        vertexShader:`attribute float aPhase; attribute vec3 aTint; uniform float uTime; uniform float uSize;
+          varying float vA; varying vec3 vT;
+          void main(){ vT=aTint; vec4 mv=modelViewMatrix*vec4(position,1.0);
+            float tw=0.6+0.4*sin(uTime*0.8+aPhase); vA=tw;
+            gl_PointSize=uSize*tw*(300.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
+        fragmentShader:`varying float vA; varying vec3 vT;
+          void main(){ vec2 uv=gl_PointCoord-0.5; float a=smoothstep(0.5,0.05,length(uv));
+            gl_FragColor=vec4(vT, a*vA); }`
+      });
+      this.scene.add(new THREE.Points(geo, mat));
+      return mat;
+    };
+    const far = make(1600, 900, 2600, 2.2);
+    const near = make(500, 480, 980, 1.6);
+    this.updatables.push((dt, t) => { far.uniforms.uTime.value = t; near.uniforms.uTime.value = t; });
+  }
+
+  // ----------------------------------------------------------
+  // 天空中的巨大地球（Hero Composition 的一部分）
+  // ----------------------------------------------------------
+  createEarth() {
+    const R = 58;   // 缩小 ~20%：仍是 Hero 背景，但不压过城市
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uTime:{value:0} },
+      vertexShader:`varying vec3 vP; varying vec3 vN; varying vec3 vV;
+        void main(){ vP=position; vN=normalize(normalMatrix*normal);
+          vec4 mv=modelViewMatrix*vec4(position,1.0); vV=normalize(-mv.xyz);
+          gl_Position=projectionMatrix*mv; }`,
+      fragmentShader:`uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV;
+        ${NOISE_GLSL}
+        void main(){
+          vec3 p=normalize(vP);
+          float h=fbm(p*1.7 + vec3(0.0, uTime*0.02, 0.0));
+          float land=smoothstep(0.06,0.16,h);
+          vec3 ocean=vec3(0.015,0.13,0.40); vec3 shallow=vec3(0.04,0.28,0.58);
+          vec3 g1=vec3(0.08,0.34,0.16); vec3 g2=vec3(0.32,0.30,0.20);
+          vec3 col=mix(ocean, shallow, smoothstep(-0.2,0.05,h));
+          col=mix(col, mix(g1,g2, smoothstep(0.1,0.4,h)), land);
+          col=mix(col, vec3(0.92), smoothstep(0.80,0.92, abs(p.y))); // 极冠
+          // 云层（独立噪声带，偏白）
+          float cl=fbm(p*2.6 + vec3(uTime*0.03, 4.7, 1.3));
+          float clouds=smoothstep(0.12,0.42,cl);
+          col=mix(col, vec3(0.95,0.97,1.0), clouds*0.75);
+          float ndv=clamp(dot(normalize(vN), normalize(vV)),0.0,1.0);
+          col += vec3(0.30,0.62,1.0) * pow(1.0-ndv, 3.0) * 0.9;       // 大气辉光
+          gl_FragColor=vec4(col,1.0);
+        }`
+    });
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(R, 96, 96), mat);
+    earth.position.set(80, 165, -480);
+    this.scene.add(earth);
+
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this.makeGlowTexture([[0,'rgba(150,210,255,0.75)'],[0.3,'rgba(90,160,255,0.3)'],[0.7,'rgba(40,90,200,0.07)'],[1,'rgba(0,0,0,0)']]),
+      transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
+    }));
+    halo.scale.set(R*4.2, R*4.2, 1); halo.position.copy(earth.position);
+    this.scene.add(halo);
+
+    this.updatables.push((dt, t) => { mat.uniforms.uTime.value = t; earth.rotation.y = t*0.02; });
+  }
+
+  // ----------------------------------------------------------
+  // 地表漂浮尘埃（氛围）
+  // ----------------------------------------------------------
+  createDust() {
+    const count = 600; const dgeo = new THREE.BufferGeometry();
+    const dp = new Float32Array(count*3);
+    for (let i=0;i<count;i++){
+      const x=(Math.random()-0.5)*560, z=(Math.random()-0.5)*560;
+      dp[i*3]=x; dp[i*3+1]=Math.abs(this.terrainHeight(x,z))+2+Math.random()*16; dp[i*3+2]=z;
+    }
+    dgeo.setAttribute('position', new THREE.BufferAttribute(dp,3));
+    const dmat = new THREE.PointsMaterial({ color:0xbfd4e6, size:0.5, transparent:true, opacity:0.4, depthWrite:false, blending:THREE.AdditiveBlending });
+    const dust = new THREE.Points(dgeo, dmat);
+    this.scene.add(dust);
+    this.updatables.push((dt,t)=>{ dust.rotation.y = t*0.01; dust.position.y = Math.sin(t*0.3)*0.4; });
+  }
+
+  // ----------------------------------------------------------
+  // 近景漂浮月尘（跟随玩家的微光颗粒，视觉精修：增强空间体积感）
+  // ----------------------------------------------------------
+  createMotes() {
+    const count = 340;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3), phase = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      pos[i*3]   = (Math.random() - 0.5) * 90;
+      pos[i*3+1] = 0.4 + Math.random() * 7.5;
+      pos[i*3+2] = (Math.random() - 0.5) * 90;
+      phase[i] = Math.random() * Math.PI * 2;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uPx: { value: this.renderer.getPixelRatio() } },
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: `attribute float aPhase; uniform float uTime; uniform float uPx; varying float vA;
+        void main(){
+          vec3 p = position;
+          p.x += sin(uTime*0.22 + aPhase) * 1.6;          // 缓慢漂移
+          p.y += sin(uTime*0.35 + aPhase*1.7) * 0.9;
+          p.z += cos(uTime*0.18 + aPhase*0.9) * 1.6;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          float tw = 0.45 + 0.55 * sin(uTime*0.9 + aPhase*2.3);
+          vA = max(tw, 0.0) * smoothstep(46.0, 20.0, -mv.z);   // 远处淡出
+          gl_PointSize = 2.6 * uPx * tw * (60.0 / -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `varying float vA;
+        void main(){ vec2 uv = gl_PointCoord - 0.5; float a = smoothstep(0.5, 0.08, length(uv));
+          gl_FragColor = vec4(0.75, 0.88, 1.0, a * vA * 0.5); }`
+    });
+    this._motes = new THREE.Points(geo, mat);
+    this._motes.frustumCulled = false;
+    this.scene.add(this._motes);
+    this.updatables.push((dt, t) => {
+      mat.uniforms.uTime.value = t;
+      // 颗粒云整体跟随玩家（贴地高度随地形），营造"尘埃在身边浮动"的近景氛围
+      const gy = this.collision ? this.collision.ground(this.playerPos.x, this.playerPos.z) : 0;
+      this._motes.position.set(this.playerPos.x, gy, this.playerPos.z);
+    });
+  }
+
+  // ----------------------------------------------------------
+  // 交互点系统（4 主线 + 剧情子终端 + 车站登车点）
+  // ----------------------------------------------------------
+  createInteractivePoints() {
+    const mkBeacon = (pos, color = 0x7fe9ff, scale = 1) => {
+      const beacon = new THREE.Group(); beacon.position.copy(pos);
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(1.0 * scale, 1.2 * scale, 0.25, 20), this.palette.mats.dark);
+      base.position.y = 0.12; beacon.add(base);
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.14 * scale, 0.14 * scale, 3.6 * scale, 10), this.glowMat(color, 1.6));
+      col.position.y = 2.0 * scale; beacon.add(col);
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.5 * scale, 14, 14), this.glowMat(color, 2.2));
+      orb.position.y = 4.1 * scale; beacon.add(orb);
+      this.scene.add(beacon);
+      this.updatables.push((dt, t) => { orb.material.emissiveIntensity = 1.8 + Math.sin(t * 2.2) * 0.8; orb.position.y = 4.1 * scale + Math.sin(t * 1.5) * 0.15; });
+      return { beacon, orb };
+    };
+
+    // 四条主线点
+    this.points = INTERACT_POINTS.map(c => {
+      const pos = new THREE.Vector3(c.pos.x, c.pos.y, c.pos.z);
+      const { beacon, orb } = mkBeacon(pos);
+      return { id: c.id, kind: c.kind, quest: c.quest, name: c.name, tag: c.tag, title: c.title, body: c.body, prompt: c.prompt, pos, beacon, orb, done: false };
+    });
+    // 剧情子终端（小型琥珀色信标）
+    for (const c of STORY_POINTS) {
+      const pos = new THREE.Vector3(c.pos.x, c.pos.y, c.pos.z);
+      const { beacon, orb } = mkBeacon(pos, 0xffd27f, 0.62);
+      this.points.push({ id: c.id, kind: c.kind, node: c.node, name: c.name, prompt: c.prompt, pos, beacon, orb, done: false, sub: true });
+    }
+    // 车站登车点（无信标，站台本身即标识）
+    STATIONS.forEach((st, i) => {
+      this.points.push({
+        id: 'board_' + st.id, kind: 'board', station: i, name: st.cn,
+        prompt: '[E] 登车 · 轨道交通', pos: new THREE.Vector3(st.platform.x, 3, st.platform.z), done: false, sub: true
+      });
+    });
+
+    // 剧情状态
+    this.story = {
+      city: false,
+      life: { water: false, light: false, oxygen: false },
+      earth: false,
+      mars: { cargo: false, energy: false, auth: false }
+    };
+    this.riding = null;   // { from, dest }
+
+    // 大任务板主线列表（中文为主，英文小字辅助）
+    const ul = document.getElementById('qbList');
+    this.points.filter(p => !p.sub).forEach((p, i) => {
+      const li = document.createElement('li'); li.dataset.id = p.id;
+      const q = QUESTS[i];
+      li.innerHTML = `<span class="dot"></span><span class="name">0${i + 1} ${q.cn}</span><span class="en">${q.en}</span>`;
+      ul.appendChild(li);
+    });
+    this.updateNextHighlight();
+  }
+
+  // ----------------------------------------------------------
+  // 剧情终端道具（状态灯 / 全息标签 / 链路天线）
+  // ----------------------------------------------------------
+  createStoryProps() {
+    const { mats } = this.palette;
+    this.storyProps = { eco: {}, mars: {}, holoLabels: [] };
+
+    const terminal = (x, z) => {
+      const g = new THREE.Group();
+      const ped = box(1.1, 1.25, 0.6, mats.dark); ped.position.y = 0.62; g.add(ped);
+      const scr = box(0.95, 0.65, 0.08, mats.energySoft); scr.position.set(0, 1.55, 0.18); scr.rotation.x = -0.3; g.add(scr);
+      const orb = sph(0.16, new THREE.MeshStandardMaterial({ color: 0x1a1208, emissive: 0xffb35e, emissiveIntensity: 1.2 }), 10, 8);
+      orb.position.y = 2.1; g.add(orb);
+      g.position.set(x, this.terrainHeight(x, z), z);
+      this.scene.add(g);
+      return { group: g, orb };
+    };
+
+    // 生态三子系统终端 + 火箭两个检查终端
+    this.storyProps.eco.water = terminal(135.5, -15);
+    this.storyProps.eco.light = terminal(142, -2);
+    this.storyProps.eco.oxygen = terminal(124, -17);
+    this.storyProps.mars.cargo = terminal(14, -141);
+    this.storyProps.mars.energy = terminal(15, -154);
+
+    // EARTH LINK：小型相控阵面板（连接后转向地球）
+    const link = new THREE.Group();
+    const lPost = cyl(0.18, 0.26, 2.6, mats.dark, 10); lPost.position.y = 1.3; link.add(lPost);
+    const lPanel = box(2.4, 1.5, 0.12, mats.white2); lPanel.position.y = 3.0; link.add(lPanel);
+    const lGrid = box(2.44, 1.54, 0.06, mats.energySoft); lGrid.position.y = 3.0; lGrid.position.z = -0.06; link.add(lGrid);
+    link.position.set(-148, this.terrainHeight(-148, -14), -14);
+    this.scene.add(link);
+    this.storyProps.linkPanel = link;
+
+    // 城市激活全息标签（初始隐藏，ACTIVATE CITY 后依次亮起）
+    const mkLabel = (text, x, y, z) => {
+      const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+      const x2 = c.getContext('2d');
+      x2.font = '500 44px -apple-system, "PingFang SC", sans-serif';
+      x2.textAlign = 'center'; x2.textBaseline = 'middle';
+      x2.fillStyle = 'rgba(127,233,255,0.95)';
+      x2.fillText(text, 256, 50);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0 }));
+      sp.scale.set(14, 2.6, 1);
+      sp.position.set(x, y, z);
+      this.scene.add(sp);
+      return sp;
+    };
+    this.storyProps.holoLabels = [
+      mkLabel('◇ 生态穹顶', 24, 42, -8),
+      mkLabel('◇ 科研月球村', -24, 44, -4),
+      mkLabel('◇ 深空火箭港', 0, 46, -26),
+      mkLabel('◇ 轨道交通网', 0, 48, 16),
+    ];
+    // 城市网络上空的全息环
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(7, 0.1, 8, 48), this.glowMat(0x7fe9ff, 1.2));
+    halo.rotation.x = Math.PI / 2;
+    halo.position.set(0, this.terrainHeight(0, 0) + 44, 0);
+    halo.visible = false;
+    this.scene.add(halo);
+    this.storyProps.cityHalo = halo;
+    this.updatables.push((dt, t) => { if (halo.visible) { halo.rotation.z = t * 0.3; } });
+  }
+
+  // ----------------------------------------------------------
+  // UI 交互逻辑
+  // ----------------------------------------------------------
+  createUI() {
+    this.dom = {
+      prompt: document.getElementById('prompt'),
+      info: document.getElementById('infoPanel'),
+      infoTag: document.getElementById('infoTag'),
+      infoTitle: document.getElementById('infoTitle'),
+      infoBody: document.getElementById('infoBody'),
+      infoClose: document.getElementById('infoClose'),
+      taskProg: document.getElementById('taskProg'),
+      coords: document.getElementById('coords'),
+      toast: document.getElementById('toast'),
+      start: document.getElementById('startOverlay'),
+      back: document.getElementById('backBtn'),
+      crosshair: document.querySelector('.crosshair'),
+      pause: document.getElementById('pauseMenu'),
+      pauseProg: document.getElementById('pauseProg'),
+      resume: document.getElementById('resumeBtn'),
+      quit: document.getElementById('quitBtn'),
+      infoActions: document.getElementById('infoActions'),
+      transitUI: document.getElementById('transitUI'),
+      questBoard: document.getElementById('questBoard'),
+      qbList: document.getElementById('qbList'),
+      qbProg: document.getElementById('qbProg'),
+      qbNext: document.getElementById('qbNext'),
+      qbBackdrop: document.getElementById('qbBackdrop'),
+      qbClose: document.getElementById('qbClose'),
+      taskEntry: document.getElementById('taskEntry'),
+      teProg: document.getElementById('teProg'),
+      mqName: document.getElementById('mqName'),
+      mqSub: document.getElementById('mqSub'),
+      mqDir: document.getElementById('mqDir'),
+      npcBubble: document.getElementById('npcBubble'),
+      guideArrow: document.getElementById('guideArrow'),
+      cineCap: document.getElementById('cineCap')
+    };
+
+    this.dom.infoClose.addEventListener('click', () => this.closeInfo());
+    this.dom.back.addEventListener('click', () => { window.location.href = INTEGRATION.backUrl; });
+    this.dom.resume.addEventListener('click', () => { this.lockPointer(); });
+    this.dom.quit.addEventListener('click', () => { window.location.href = INTEGRATION.backUrl; });
+
+    // 键盘
+    this._onKeyDown = (e) => {
+      if (this.riding && e.code.startsWith('Digit')) { this.pickDestination(parseInt(e.code.slice(5), 10) - 1); return; }
+      if (this.riding && e.code === 'Space') { this.transit.skipRide(); e.preventDefault(); return; }
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') this.keys.f = true;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') this.keys.b = true;
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') this.keys.l = true;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') this.keys.r = true;
+      if (e.code === 'Space') { this.keys.jump = true; e.preventDefault(); }
+      if (e.code === 'KeyV') this.toggleView();
+      if (e.code === 'KeyJ') this.toggleQuestBoard();   // 任务中心（指针锁定中鼠标不可点击 DOM，用 J 开合）
+      if (e.code === 'KeyE') this.tryInteract();
+    };
+    this._onKeyUp = (e) => {
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') this.keys.f = false;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') this.keys.b = false;
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') this.keys.l = false;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') this.keys.r = false;
+      if (e.code === 'Space') this.keys.jump = false;
+    };
+    document.addEventListener('keydown', this._onKeyDown);
+    document.addEventListener('keyup', this._onKeyUp);
+  }
+
+  closeInfo() {
+    this.dom.info.classList.remove('show');
+    this.panelOpen = false;
+    // 对话面板经任意路径关闭（E 键/点击 ×）都要复位对话镜头与状态
+    if (this._dialogueOpen) { this._dialogueOpen = false; this._endDialogueCam(); }
+    // 面板关闭后回到游戏（重新锁定指针；乘车中不锁定）
+    if (this.state === 'playing' && !this.riding && !this.locked) this.lockPointer();
+  }
+
+  showToast(text, ms = 3600) {
+    this.dom.toast.textContent = text;
+    this.dom.toast.classList.add('show');
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(() => this.dom.toast.classList.remove('show'), ms);
+  }
+
+  // 通用动作面板：title/body + 动作按钮（ACTION FIRST）
+  openPanel({ tag, title, body, actions = [] }) {
+    this.dom.infoTag.textContent = tag;
+    this.dom.infoTitle.textContent = title;
+    this.dom.infoBody.innerHTML = body;
+    const abox = this.dom.infoActions;
+    abox.innerHTML = '';
+    for (const a of actions) {
+      const b = document.createElement('div');
+      b.className = 'ia-btn' + (a.dim ? ' dim' : '') + (a.warm ? ' warm' : '');
+      b.textContent = a.label;
+      b.addEventListener('click', () => a.fn());
+      abox.appendChild(b);
+    }
+    this.dom.info.classList.add('show');
+    this.panelOpen = true;
+    if (this.locked) document.exitPointerLock();
+  }
+
+  // ----------------------------------------------------------
+  // E 键路由：按交互点 kind 分发（ACTION FIRST, STORY SECOND）
+  // ----------------------------------------------------------
+  tryInteract() {
+    if (this.dom.info.classList.contains('show')) { this.closeInfo(); return; }
+    if (this.riding) {   // 乘车中：E = 到站下车
+      if (this.transit.arrivedAtDest()) this.alight();
+      else this.showToast('列车行驶中 · [空格] 跳过行程');
+      return;
+    }
+    if (this.state !== 'playing') return;
+    if (this.activeNPC) return this.openDialogue(this.activeNPC);   // NPC 第二阶段对话
+    if (!this.activePoint) return;
+    const p = this.activePoint;
+    switch (p.kind) {
+      case 'activate-city':   return this.uiActivateCity(p);
+      case 'eco-status':      return this.uiEcoStatus(p);
+      case 'eco-node':        return this.uiEcoNode(p);
+      case 'colonist-dialog': return this.uiColonist(p);
+      case 'earth-link':      return this.uiEarthLink(p);
+      case 'mars-node':       return this.uiMarsNode(p);
+      case 'authorize-mars':  return this.uiAuthorizeMars(p);
+      case 'board':           return this.uiBoard(p);
+    }
+  }
+
+  // —— 01 中央基地：激活城市网络 ——
+  uiActivateCity(p) {
+    if (this.story.city) {
+      return this.openPanel({ tag: p.tag, title: p.title, body: '城市网络在线。\n生态 / 科研 / 深空港 / 轨道交通全部运行中。' });
+    }
+    this.openPanel({
+      tag: p.tag, title: p.title, body: p.body,
+      actions: [{ label: '激活城市网络', fn: () => {
+        this.story.city = true;
+        this.transit.setOnline();   // 轨道系统启动，首班车离站
+        this.storyProps.cityHalo.visible = true;
+        this.storyProps.holoLabels.forEach((sp, i) => {
+          setTimeout(() => {
+            let o = 0;
+            const fade = () => { o += 0.04; sp.material.opacity = Math.min(0.9, o); if (o < 0.9) requestAnimationFrame(fade); };
+            fade();
+          }, 400 + i * 550);
+        });
+        this.closeInfo();
+        this.completeQuest(p);
+        this.showToast('欢迎来到月球前哨城市 2126。这里不再是一座基地，而是一座城市。', 5200);
+        // 剧情镜头：城市点亮总览（短暂接管后平滑恢复）
+        this.startCinematic(
+          [{ cam: [0, 34, 62], look: [0, 6, -10], dur: 2.8 }],
+          { main: '城市网络已激活', sub: '生态 · 科研 · 深空港 · 轨道 全部上线' }
+        );
+      } }]
+    });
+  }
+
+  // —— 02 生态舱：主控状态 + 三子系统终端 ——
+  uiEcoStatus(p) {
+    const s = this.story.life;
+    const row = (ok, name) => `<div class="${ok ? 'ok' : 'lock'}">${ok ? '●' : '○'} ${name} ${ok ? '运行中' : '待机'}</div>`;
+    this.openPanel({
+      tag: p.tag, title: p.title,
+      body: p.body + `<div class="ia-state">${row(s.water, '水循环 WATER')}${row(s.light, '农业光照 LIGHT')}${row(s.oxygen, '氧气循环 OXYGEN')}</div>`
+        + (this.isLifeDone() ? '' : '<div style="margin-top:8px;font-size:11px;color:rgba(220,240,255,.5)">→ 三个子系统终端位于穹顶外圈（琥珀色信标）</div>')
+    });
+  }
+  uiEcoNode(p) {
+    const s = this.story.life;
+    if (s[p.node]) return this.openPanel({ tag: '生态舱', title: p.name, body: '子系统运行正常。' });
+    this.openPanel({
+      tag: '生态舱', title: p.name, body: '生命维持手动恢复节点。',
+      actions: [{ label: p.prompt.replace('[E] ', ''), fn: () => {
+        s[p.node] = true; p.done = true;
+        p.orb.material.color.set(0x7fffb0); p.orb.material.emissive.set(0x7fffb0);
+        this.storyProps.eco[p.node].orb.material.emissive.set(0x7affb0);
+        this.closeInfo();
+        if (this.isLifeDone()) {
+          this.completeQuest(this.points.find(x => x.id === 'eco'));
+          this.showToast('月球没有适合我们的环境，所以我们开始创造环境。', 4800);
+        } else this.showToast(`${p.name} 已恢复`);
+      } }]
+    });
+  }
+  isLifeDone() { const s = this.story.life; return s.water && s.light && s.oxygen; }
+
+  // —— 03 月球村：研究员三问 + EARTH LINK ——
+  uiColonist(p) {
+    this.openPanel({
+      tag: p.tag, title: p.title,
+      body: p.body + '\n（可以向 TA 提问；建立 EARTH LINK 请前往西侧通讯终端）',
+      actions: COLONIST_QA.map(c => ({ label: c.q, dim: true, fn: () => {
+        this.dom.infoBody.innerHTML = `<span style="color:#7fe9ff">你：</span>${c.q}\n\n<span style="color:#7affb0">研究员：</span>${c.a}`;
+      } }))
+    });
+  }
+  uiEarthLink(p) {
+    if (this.story.earth) {
+      return this.openPanel({ tag: '通讯', title: '地球通讯终端', body: '已连接地球\n\n地月距离\n384,400 公里' });
+    }
+    this.openPanel({
+      tag: '通讯', title: '地球通讯终端', body: '相控阵待命。建立与地球的实时通讯链路。',
+      actions: [{ label: '连接地球', fn: () => {
+        this.story.earth = true; p.done = true;
+        p.orb.material.color.set(0x7fffb0); p.orb.material.emissive.set(0x7fffb0);
+        const panel = this.storyProps.linkPanel;   // 相控阵面板抬升指向地球
+        let v = 0;
+        const anim = () => { v += 0.02; panel.rotation.x = -0.9 * v; if (v < 1) requestAnimationFrame(anim); };
+        anim();
+        this.dom.infoBody.innerHTML = '已连接地球\n\n地月距离\n384,400 公里';
+        this.dom.infoActions.innerHTML = '';
+        this.completeQuest(this.points.find(x => x.id === 'research'));
+      } }]
+    });
+  }
+
+  // —— 04 深空港：出发准备三检查 + 授权 ——
+  uiMarsNode(p) {
+    const s = this.story.mars;
+    const names = { cargo: '核验货运舱', energy: '检查能源接口' };
+    if (s[p.node]) return this.openPanel({ tag: '深空港', title: p.name, body: '检查已通过。' });
+    this.openPanel({
+      tag: '深空港', title: p.name, body: '火星出发准备检查项。',
+      actions: [{ label: names[p.node], fn: () => {
+        s[p.node] = true; p.done = true;
+        p.orb.material.color.set(0x7fffb0); p.orb.material.emissive.set(0x7fffb0);
+        this.storyProps.mars[p.node].orb.material.emissive.set(0x7affb0);
+        this.closeInfo();
+        this.showToast(p.node === 'cargo' ? '货运核验通过' : '能源接口正常');
+      } }]
+    });
+  }
+  uiAuthorizeMars(p) {
+    const s = this.story;
+    const L = this._launch;
+    // 发射进行中 / 等待新舰：只展示状态
+    if (L && L.state !== 'idle') {
+      const msg = L.state === 'cooldown'
+        ? '运输舰已离港，正在前往火星。\n下一艘正在进场准备，请稍候。'
+        : '发射程序进行中。\n请到室外观看升空。';
+      return this.openPanel({ tag: p.tag, title: p.title, body: msg });
+    }
+    const doLaunch = () => {
+      this.closeInfo();
+      if (this.launchRocket()) {
+        if (!s.mars.auth) this.showToast('非常规发射 · 部分检查未完成，运输舰照常升空', 3600);
+      }
+    };
+    if (s.mars.auth) {
+      return this.openPanel({
+        tag: p.tag, title: p.title,
+        body: '目的地\n火星\n\n航线状态\n就绪',
+        actions: [{ label: '发射 · 前往火星', warm: true, fn: doLaunch }]
+      });
+    }
+    const checks = [
+      [s.mars.cargo, '货运核验 CARGO'], [s.mars.energy, '能源接口 ENERGY'],
+      [s.city, '城市网络 CITY'], [this.isLifeDone(), '生态循环 LIFE'], [s.earth, '地球通讯 LINK']
+    ];
+    const rows = checks.map(([ok, n]) => `<div class="${ok ? 'ok' : 'lock'}">${ok ? '●' : '○'} ${n}</div>`).join('');
+    const ready = checks.every(c => c[0]);
+    const actions = [];
+    if (ready) actions.push({ label: '授权火星航线', fn: () => {
+      s.mars.auth = true;
+      this.completeQuest(p);
+      this.showToast('火星航线已授权');
+      this.dom.infoBody.innerHTML = '目的地\n火星\n\n航线状态\n就绪';
+      this.dom.infoActions.innerHTML = '';
+      const b = document.createElement('div');
+      b.className = 'ia-btn warm'; b.textContent = '发射 · 前往火星';
+      b.addEventListener('click', doLaunch);
+      this.dom.infoActions.appendChild(b);
+      // 剧情镜头（章节收尾）：火箭 → 地球，点明月球是通往火星的跳板
+      this.startCinematic(
+        [
+          { cam: [26, 26, -118], look: [0, 30, -165], dur: 2.6 },   // 看向运输舰
+          { cam: [12, 46, -104], look: [80, 150, -460], dur: 2.8 },  // 抬升望向地球
+        ],
+        { main: '下一站 · 火星', sub: '月球 — 人类迈向星际文明的第一站' }
+      );
+    } });
+    // 新设定：无论检查是否完成，运输舰都可直接发射
+    actions.push({ label: ready ? '跳过流程 · 立即发射' : '跳过检查 · 直接发射', warm: true, fn: doLaunch });
+    this.openPanel({
+      tag: p.tag, title: p.title,
+      body: p.body + `<div class="ia-state">${rows}</div>`
+        + (ready ? '' : '<div style="margin-top:8px;font-size:11px;color:rgba(220,240,255,.5)">→ 检查未完成也可直接发射，运输舰照常升空</div>'),
+      actions
+    });
+  }
+
+  // —— 轨道交通：登车 / 选目的地 / 下车 ——
+  uiBoard(p) {
+    if (!this.transit.isOnline()) {
+      return this.openPanel({ tag: '轨道交通', title: '月球轨道交通', body: '轨道系统离线。\n请先前往中央基地激活城市网络。' });
+    }
+    if (!this.transit.isDwellingAt(p.station)) {
+      // 列车不在本站 → 呼叫列车（优先进站 + 延长停站）
+      this.transit.call(p.station);
+      return this.showToast('已呼叫列车 · 正在驶来，请在站台稍候', 2800);
+    }
+    // 登车：进入乘车模式（保持指针锁定，数字键选目的地）
+    this.riding = { from: p.station, dest: -1 };
+    this.velocity.set(0, 0, 0);
+    const dests = document.getElementById('transitDests');
+    dests.innerHTML = '';
+    STATIONS.forEach((st, i) => {
+      const d = document.createElement('span');
+      d.className = 't-dest' + (i === p.station ? ' here' : '');
+      d.innerHTML = `<b>[${i + 1}]</b>${st.cn}`;
+      dests.appendChild(d);
+    });
+    this.dom.transitUI.classList.add('show');
+    this.showToast('已登车 · 按数字键选择目的地', 2600);
+  }
+  pickDestination(i) {
+    if (!this.riding || this.riding.dest >= 0) return;
+    if (i < 0 || i >= STATIONS.length || i === this.riding.from) return;
+    this.riding.dest = i;
+    this.dom.transitUI.classList.remove('show');
+    this.transit.board(i);
+    this.showToast(`前往 ${STATIONS[i].cn} · [空格] 跳过行程`, 3000);
+  }
+  alight() {
+    const dest = this.riding.dest;
+    this.riding = null;
+    this.transit.endRide();
+    const st = STATIONS[dest];
+    this.playerPos.set(st.platform.x, this.collision.ground(st.platform.x, st.platform.z) + this.eyeHeight, st.platform.z);
+    this.showToast(`已抵达 ${st.cn}`);
+  }
+
+  completeQuest(p) {
+    if (p && !p.done) this.markVisited(p);
+  }
+
+  markVisited(p) {
+    p.done = true; this.visited.add(p.id);
+    if (p.orb) { p.orb.material.color.set(0x7fffb0); p.orb.material.emissive.set(0x7fffb0); }
+    const li = document.querySelector(`#qbList li[data-id="${p.id}"]`);
+    if (li) li.classList.add('done');
+    this.dom.taskProg.textContent = `${this.visited.size} / 4`;
+    this.updateNextHighlight();
+    this.updateQuestPanel();
+    this.xingdaCelebrate();
+    if (this.notifyQuest) this.notifyQuest(p);   // 整合层：向父工程上报主线完成
+    if (this.visited.size === 4) {
+      this.dom.toast.textContent = '月球主线全部完成 · 火星航线已解锁';
+      this.dom.toast.classList.add('show');
+      setTimeout(() => this.dom.toast.classList.remove('show'), 4200);
+    }
+  }
+
+  // 任务列表中"当前目标"高亮（与世界 Marker 的脉冲目标一致）
+  updateNextHighlight() {
+    const next = this.points.find(pt => !pt.sub && !pt.done);
+    document.querySelectorAll('#qbList li').forEach(li => {
+      li.classList.toggle('next', !!next && li.dataset.id === next.id);
+    });
+  }
+
+  // ---------- 双层任务系统 ----------
+  getCurrentQuest() { return this.points.find(p => !p.sub && !p.done) || null; }
+  toggleQuestBoard() {
+    if (this.riding) return;
+    if (this.dom.questBoard.classList.contains('show')) this.closeQuestBoard();
+    else this.openQuestBoard();
+  }
+  openQuestBoard() {
+    if (this.dom.questBoard.classList.contains('show')) return;
+    this.dom.questBoard.classList.add('show');
+    this.dom.qbBackdrop.classList.add('show');
+    this.updateQuestPanel();
+    this.panelOpen = true;
+    if (this.locked) document.exitPointerLock();   // 打开时释放鼠标，便于点击
+  }
+  closeQuestBoard() {
+    if (!this.dom.questBoard.classList.contains('show')) return;
+    this.dom.questBoard.classList.remove('show');
+    this.dom.qbBackdrop.classList.remove('show');
+    this.panelOpen = false;
+    if (this.state === 'playing' && !this.locked) this.lockPointer();
+  }
+  updateQuestPanel() {
+    const GUIDE = {
+      city:  { name: '激活月球城市', sub: '前往中央基地，找到城市信息核心' },
+      life:  { name: '恢复生态循环', sub: '前往生态舱，依次启动 水循环 / 人工光照 / 氧气循环' },
+      earth: { name: '建立地球通讯', sub: '前往月球村，与居民交谈并连接地球通讯终端' },
+      mars:  { name: '授权火星航线', sub: '前往深空火箭港，完成货运 / 能源 / 授权检查' },
+    };
+    this._questGuide = GUIDE;
+    const cur = this.getCurrentQuest();
+    if (cur) {
+      const g = GUIDE[cur.quest] || { name: cur.name, sub: '' };
+      this.dom.mqName.textContent = g.name;
+      this.dom.mqSub.textContent = g.sub;
+      this.dom.qbNext.textContent = `下一目标：${g.name}`;
+    } else {
+      this.dom.mqName.textContent = '主线已完成';
+      this.dom.mqSub.textContent = '火星航线已解锁 · 下一站：火星';
+      this.dom.qbNext.textContent = '月球主线全部完成 · 火星航线已解锁';
+    }
+    this.dom.qbProg.textContent = `月球主线 ${this.visited.size} / 4`;
+    this.dom.teProg.textContent = `${this.visited.size} / 4`;
+  }
+
+  // ---------- 星达情绪反馈 ----------
+  xingdaCelebrate() {
+    if (!this.xingda) return;
+    this.xingda.setState('CELEBRATE');
+    clearTimeout(this._celT);
+    this._celT = setTimeout(() => this.xingda && this.xingda.setState('IDLE'), 1600);
+  }
+  xingdaReact(state, ms = 1800) {
+    if (!this.xingda) return;
+    this.xingda.setState(state);
+    clearTimeout(this._celT);
+    this._celT = setTimeout(() => this.xingda && this.xingda.setState('IDLE'), ms);
+  }
+
+  // ---------- 星达地标好奇（首次看到地球/生态穹顶/运输舰，各触发一次，不抢相机） ----------
+  _checkCuriosity(dt) {
+    if (!this.xingda || this.riding || this.cinematic || this._dlgCam) return;
+    if (this.state !== 'playing') return;
+    this._playT = (this._playT || 0) + dt;
+    this._seen = this._seen || { earth: false, eco: false, ship: false };
+    const yaw = this.viewYaw, pitch = this.viewPitch;
+    const fx = -Math.sin(yaw) * Math.cos(pitch), fy = Math.sin(pitch), fz = -Math.cos(yaw) * Math.cos(pitch);
+    const look = (tx, ty, tz) => {
+      const dx = tx - this.playerPos.x, dy = ty - this.playerPos.y, dz = tz - this.playerPos.z;
+      const l = Math.hypot(dx, dy, dz) || 1;
+      return (dx * fx + dy * fy + dz * fz) / l;
+    };
+    // 地球：开场 2 秒后、视线覆盖即触发（出生 Hero Composition 正对地球）
+    if (!this._seen.earth && this._playT > 2 && look(80, 165, -480) > 0.5) {
+      this._seen.earth = true; this.xingdaReact('CURIOUS', 1800); return;
+    }
+    // 生态穹顶：进入 45m 且朝它看
+    if (!this._seen.eco && Math.hypot(this.playerPos.x - 130, this.playerPos.z + 40) < 45 && look(130, 14, -40) > 0.4) {
+      this._seen.eco = true; this.xingdaReact('CURIOUS', 1600); return;
+    }
+    // 深空运输舰：进入 62m 且朝它看
+    if (!this._seen.ship && Math.hypot(this.playerPos.x - 0, this.playerPos.z + 165) < 62 && look(0, 24, -165) > 0.4) {
+      this._seen.ship = true; this.xingdaReact('CURIOUS', 1600); return;
+    }
+  }
+
+  // ----------------------------------------------------------
+  // 控制器 + 状态机（start / playing / paused / 信息面板）
+  // ----------------------------------------------------------
+  // ---------- 指针锁定（自定义，支持第一/第三人称） ----------
+  lockPointer() {
+    const el = this.renderer && this.renderer.domElement;
+    if (el && el.requestPointerLock) el.requestPointerLock();
+  }
+  toggleView() {
+    this.viewMode = this.viewMode === 'third' ? 'first' : 'third';
+    // FOV 随视角切换（第一人称略宽增强临场，第三人称保持探索视野），并重投影
+    this.camera.fov = this.viewMode === 'third' ? this.fovThird : this.fovFirst;
+    this.camera.updateProjectionMatrix();
+    this.showToast(this.viewMode === 'third' ? '第三人称视角' : '第一人称视角', 1300);
+  }
+  setupControls() {
+    const el = this.renderer.domElement;
+    const start = this.dom.start;
+    start.addEventListener('click', () => this.lockPointer());
+    // 任务中心：点击展开 / 关闭大任务板
+    this.dom.taskEntry.addEventListener('click', () => this.openQuestBoard());
+    this.dom.qbClose.addEventListener('click', () => this.closeQuestBoard());
+    this.dom.qbBackdrop.addEventListener('click', () => this.closeQuestBoard());
+
+    document.addEventListener('pointerlockchange', () => {
+      this.locked = document.pointerLockElement === el;
+      if (this.locked) {
+        this.state = 'playing';
+        start.classList.add('hide');
+        this.dom.pause.classList.remove('show');
+        this.dom.crosshair.classList.add('on');
+        // 进场第一次自动展示大任务板（月球主线）
+        if (!this._questShown) {
+          this._questShown = true;
+          this.updateQuestPanel();
+          setTimeout(() => this.openQuestBoard(), 700);
+        }
+      } else {
+        this.dom.crosshair.classList.remove('on');
+        this.dom.prompt.classList.remove('show');
+        if (this.panelOpen) return;                 // 信息面板需要指针，不弹暂停菜单
+        if (this.state === 'playing') {             // ESC → 真正的暂停菜单
+          this.state = 'paused';
+          this.dom.pauseProg.textContent = `${this.visited.size} / 4`;
+          this.dom.pause.classList.add('show');
+        }
+      }
+    });
+    document.addEventListener('pointerlockerror', () => { start.classList.remove('hide'); });
+
+    // 鼠标环绕（第一/第三人称共用 viewYaw / viewPitch，灵敏度一致）
+    document.addEventListener('mousemove', (e) => {
+      if (!this.locked) return;
+      this.viewYaw -= e.movementX * 0.0021;
+      this.viewPitch -= e.movementY * 0.0021;
+      this.viewPitch = Math.max(-1.35, Math.min(1.35, this.viewPitch));
+    });
+  }
+
+  // ---------- 相机定位（第一/第三人称 + 相机避障） ----------
+  // 相机避障：从角色胸口沿视线向目标相机点步进，返回最远无碰撞比例（0~1）
+  _camClearance(px, py, pz, tx, ty, tz) {
+    const steps = 18;
+    let free = 0;
+    for (let i = 1; i <= steps; i++) {
+      const k = i / steps;
+      const x = px + (tx - px) * k, y = py + (ty - py) * k, z = pz + (tz - pz) * k;
+      // 以相机点为中心检测一小段垂直胶囊（~1.8m），确保该点不进入墙体/建筑/管道
+      if (this.collision.collides(x, z, y - 0.9)) break;
+      free = k;
+    }
+    return free;
+  }
+
+  // ---------- 剧情镜头（短暂接管 → 展示关键信息 → 平滑恢复玩家控制） ----------
+  // shots: [{ cam:[x,y,z], look:[x,y,z], dur }]；cap: {main,sub} 结尾字幕
+  startCinematic(shots, cap, onDone) {
+    if (this.cinematic) return;
+    this.cinematic = { shots, i: 0, t: 0, onDone, cam: this.camera.position.clone(), look: this._lookV.clone() };
+    this.panelOpen = true;
+    if (this.locked) document.exitPointerLock();
+    if (cap) {
+      this.dom.cineCap.innerHTML = `<div class="cc-main">${cap.main}</div><div class="cc-sub">${cap.sub || ''}</div>`;
+      this.dom.cineCap.classList.add('show');
+    }
+  }
+  _updateCinematic(dt) {
+    const c = this.cinematic, s = c.shots[c.i];
+    c.t += dt;
+    const k0 = Math.min(1, c.t / s.dur), k = k0 * k0 * (3 - 2 * k0);
+    this.camera.position.set(
+      c.cam.x + (s.cam[0] - c.cam.x) * k,
+      c.cam.y + (s.cam[1] - c.cam.y) * k,
+      c.cam.z + (s.cam[2] - c.cam.z) * k);
+    this._lookV.set(
+      c.look.x + (s.look[0] - c.look.x) * k,
+      c.look.y + (s.look[1] - c.look.y) * k,
+      c.look.z + (s.look[2] - c.look.z) * k);
+    this.camera.lookAt(this._lookV);
+    if (k0 >= 1) {
+      c.i++; c.t = 0; c.cam.copy(this.camera.position); c.look.copy(this._lookV);
+      if (c.i >= c.shots.length) this._endCinematic();
+    }
+  }
+  _endCinematic() {
+    const c = this.cinematic;
+    // 记录电影结束机位，供玩家相机平滑混入恢复
+    this._cineFrom = this.camera.position.clone();
+    this._cineFromLook = this._lookV.clone();
+    this._cineBlend = 1;
+    this.cinematic = null;
+    this.dom.cineCap.classList.remove('show');
+    this.panelOpen = false;
+    if (this.state === 'playing' && !this.locked) this.lockPointer();
+    if (c && c.onDone) c.onDone();
+  }
+
+  // ----------------------------------------------------------
+  // 火箭发射系统（无需完成全部主线：到港即可发射）
+  // 状态机：idle → countdown(3.2s) → liftoff(爬升) → away(远去) → cooldown(12s) → idle(新舰就位)
+  // ----------------------------------------------------------
+  _initLaunchFX() {
+    const R = this.rocket;
+    this._launch = { state: 'idle', t: 0, vy: 0, baseY: R.ship.position.y, glowColor: R.engineGlows[0].material.emissive.clone() };
+    // 发射台世界坐标（烟雾/火光锚点）
+    this._padWorld = new THREE.Vector3();
+    R.ship.getWorldPosition(this._padWorld);
+    this._padWorld.y = R.group.position.y + R.padTopY;
+
+    // 发射烟雾（Points，仅发射期间激活）
+    const N = 260;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N * 3);
+    this._smokeVel = new Float32Array(N * 3);
+    this._smokeLife = new Float32Array(N);        // 0=死粒子
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const smokeMat = new THREE.PointsMaterial({
+      map: this.makeGlowTexture([[0, 'rgba(235,240,248,0.85)'], [0.45, 'rgba(200,208,222,0.35)'], [1, 'rgba(160,168,185,0)']]),
+      size: 4.2, transparent: true, opacity: 0, depthWrite: false, color: 0xdde4ee
+    });
+    this._smoke = new THREE.Points(geo, smokeMat);
+    this._smoke.frustumCulled = false;
+    this.scene.add(this._smoke);
+    this._smokeHead = 0;
+
+    // 点火强光（发射台地面的橙光，随点火增强、随爬升衰减）
+    this._padFlash = new THREE.PointLight(0xff9a4d, 0, 110, 1.6);
+    this._padFlash.position.copy(this._padWorld).y += 4;
+    this.scene.add(this._padFlash);
+  }
+
+  _spawnSmoke(x, y, z, spread, up, n) {
+    const posAttr = this._smoke.geometry.attributes.position;
+    for (let k = 0; k < n; k++) {
+      const i = this._smokeHead; this._smokeHead = (this._smokeHead + 1) % this._smokeLife.length;
+      const a = Math.random() * Math.PI * 2, r = Math.random() * spread;
+      posAttr.array[i*3]   = x + Math.cos(a) * r * 0.4;
+      posAttr.array[i*3+1] = y;
+      posAttr.array[i*3+2] = z + Math.sin(a) * r * 0.4;
+      this._smokeVel[i*3]   = Math.cos(a) * (2 + Math.random() * spread);
+      this._smokeVel[i*3+1] = up * (0.5 + Math.random());
+      this._smokeVel[i*3+2] = Math.sin(a) * (2 + Math.random() * spread);
+      this._smokeLife[i] = 2.2 + Math.random() * 1.6;
+    }
+    posAttr.needsUpdate = true;
+  }
+
+  // 对外：发射运输舰（debug: moon.launchRocket()）
+  launchRocket() {
+    const L = this._launch;
+    if (!L || L.state !== 'idle') return false;
+    L.state = 'countdown'; L.t = 0;
+    // 观看机位：发射场北侧高点，镜头随舰体上升
+    this._launchCam = new THREE.Vector3(this._padWorld.x + 26, this._padWorld.y + 15, this._padWorld.z + 52);
+    this._shake = 0;
+    this.panelOpen = true;
+    if (this.locked) document.exitPointerLock();
+    return true;
+  }
+  launchState() { return this._launch ? this._launch.state : 'none'; }
+
+  // 发射轰鸣（Web Audio 程序生成，零外部资产；首次点火时创建）
+  _rumble(dur = 9) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this._ac = this._ac || new AC();
+      const ac = this._ac; if (ac.state === 'suspended') ac.resume();
+      const len = Math.floor(ac.sampleRate * dur);
+      const buf = ac.createBuffer(1, len, ac.sampleRate);
+      const d = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < len; i++) {           // 布朗噪声 → 低频轰鸣
+        const w = Math.random() * 2 - 1;
+        last = (last + 0.02 * w) / 1.02;
+        d[i] = last * 3.2;
+      }
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 140; lp.Q.value = 0.6;
+      const gn = ac.createGain();
+      gn.gain.setValueAtTime(0.0001, ac.currentTime);
+      gn.gain.exponentialRampToValueAtTime(0.5, ac.currentTime + 1.2);   // 点火涌起
+      gn.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dur); // 远去淡出
+      src.connect(lp); lp.connect(gn); gn.connect(ac.destination);
+      src.start();
+      // 点火爆音
+      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(52, ac.currentTime);
+      o.frequency.exponentialRampToValueAtTime(30, ac.currentTime + 2.5);
+      const og = ac.createGain(); og.gain.setValueAtTime(0.4, ac.currentTime);
+      og.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 3);
+      o.connect(og); og.connect(ac.destination); o.start(); o.stop(ac.currentTime + 3.2);
+    } catch (e) { /* 无声环境下静默降级 */ }
+  }
+
+  _updateLaunch(dt) {
+    const L = this._launch;
+    if (!L) return;
+    const R = this.rocket;
+    L.t += dt;
+
+    // 尾焰统一驱动（countdown 后段起燃 → liftoff 全燃）
+    const setFlames = (k, op) => {
+      for (const f of R.engineFlames) { f.scale.y = Math.max(0.001, k); f.material.opacity = op; }
+    };
+
+    if (L.state === 'countdown') {
+      const remain = Math.ceil(3.2 - L.t);
+      const txt = L.t < 3.0 ? `T-${remain}` : '点火 IGNITION';
+      if (this._cdTxt !== txt) {
+        this._cdTxt = txt;
+        this.dom.cineCap.innerHTML = `<div class="cc-main" style="font-size:34px">${txt}</div><div class="cc-sub">深空运输舰 · 发射程序</div>`;
+        this.dom.cineCap.classList.add('show');
+      }
+      // 引擎预热：尾焰渐起 + 内辉转橙 + 火光渐强 + 少量烟雾
+      const k = Math.max(0, (L.t - 1.4) / 1.8);
+      setFlames(k * (0.8 + Math.random() * 0.3), 0.85 * k);
+      this._padFlash.intensity = 26 * k;
+      if (k > 0) this._spawnSmoke(this._padWorld.x, this._padWorld.y + 0.5, this._padWorld.z, 7, 2.5, 2);
+      if (k > 0 && !L._rumbled) { L._rumbled = true; this._rumble(); }
+      for (const gl of R.engineGlows) gl.material.emissive.set(0xff8a3d);
+      this._shake = k * 0.4;
+      if (L.t >= 3.2) { L.state = 'liftoff'; L.t = 0; L.vy = 1.2; }
+    } else if (L.state === 'liftoff') {
+      L.vy = Math.min(46, L.vy + 8.5 * dt);        // 缓加速爬升（低重力世界的发射节奏）
+      R.ship.position.y += L.vy * dt;
+      setFlames(1 + L.vy * 0.10 + Math.random() * 0.25, 0.95);
+      this._padFlash.intensity = Math.max(0, 26 - L.t * 9);
+      this._shake = Math.max(0, 0.55 - L.t * 0.22);
+      // 台尘环 + 尾随烟
+      if (L.t < 2.8) this._spawnSmoke(this._padWorld.x, this._padWorld.y + 0.5, this._padWorld.z, 11, 3.2, 4);
+      const sy = R.group.position.y + R.ship.position.y;
+      this._spawnSmoke(this._padWorld.x, sy - 2, this._padWorld.z, 2.5, -1.5, 2);
+      if (R.ship.position.y > 230) {
+        L.state = 'away'; L.t = 0;
+        // 镜头交还玩家
+        this._cineFrom = this.camera.position.clone();
+        this._cineFromLook = this._lookV.clone();
+        this._cineBlend = 1;
+        this.panelOpen = false;
+        this.dom.cineCap.classList.remove('show');
+        const perfect = this.visited.size === 4;
+        this.showToast(perfect ? '完美起航 · 月球主线全部完成，下一站：火星' : '发射成功 · 运输舰正在前往火星', 5200);
+        if (this.notifyLaunch) this.notifyLaunch();   // 整合层：向父工程上报发射
+        if (this.state === 'playing' && !this.locked) this.lockPointer();
+        if (this.xingda) this.xingdaReact('HAPPY', 2200);
+      }
+    } else if (L.state === 'away') {
+      L.vy = Math.min(90, L.vy + 12 * dt);
+      R.ship.position.y += L.vy * dt;
+      setFlames(1.5, 0.8);
+      if (R.ship.position.y > 720) { R.ship.visible = false; setFlames(0.001, 0); L.state = 'cooldown'; L.t = 0; }
+    } else if (L.state === 'cooldown') {
+      if (L.t >= 12) {
+        // 下一艘运输舰就位 → 可再次发射
+        R.ship.position.y = L.baseY; R.ship.visible = true;
+        for (const gl of R.engineGlows) gl.material.emissive.copy(L.glowColor);
+        L._rumbled = false; L.state = 'idle';
+        this.showToast('下一艘运输舰已就位 · 发射程序可用', 3000);
+      }
+    }
+
+    // 烟雾粒子积分（所有存活粒子）
+    const posAttr = this._smoke.geometry.attributes.position;
+    let alive = 0;
+    for (let i = 0; i < this._smokeLife.length; i++) {
+      if (this._smokeLife[i] <= 0) continue;
+      this._smokeLife[i] -= dt; alive++;
+      posAttr.array[i*3]   += this._smokeVel[i*3] * dt;
+      posAttr.array[i*3+1] += this._smokeVel[i*3+1] * dt;
+      posAttr.array[i*3+2] += this._smokeVel[i*3+2] * dt;
+      this._smokeVel[i*3+1] += 1.6 * dt;          // 月尘上浮
+    }
+    posAttr.needsUpdate = true;
+    this._smoke.material.opacity = Math.max(0, Math.min(0.55, this._smoke.material.opacity + dt * 0.8 * (alive ? 1 : -2)));
+  }
+
+  updateCamera(dt) {
+    const eye = this.playerPos;
+    if (this.cinematic) { this._updateCinematic(dt); return; }   // 剧情镜头接管
+    // 发射观看镜头：倒计时/爬升期间固定机位，随舰体抬头，点火震动
+    if (this._launch && (this._launch.state === 'countdown' || this._launch.state === 'liftoff')) {
+      const sp = this.rocket.ship.getWorldPosition(this._shipW || (this._shipW = new THREE.Vector3()));
+      sp.y += 8;   // 看向船体中段而非底部火焰
+      this.camera.position.copy(this._launchCam);
+      if (this._shake > 0) {
+        this.camera.position.x += (Math.random() - 0.5) * this._shake;
+        this.camera.position.y += (Math.random() - 0.5) * this._shake;
+        this.camera.position.z += (Math.random() - 0.5) * this._shake;
+      }
+      this._lookV.lerp(sp, Math.min(1, dt * 4.5));
+      this.camera.lookAt(this._lookV);
+      return;
+    }
+    // NPC 对话镜头：星达 3/4 侧前方，同框星达与 NPC（对话结束平滑交还）
+    if (this._dlgCam) {
+      const d = this._dlgCam, k = Math.min(1, dt * 3.4), kl = Math.min(1, dt * 4.2);
+      this.camera.position.x += (d.pos.x - this.camera.position.x) * k;
+      this.camera.position.y += (d.pos.y - this.camera.position.y) * k;
+      this.camera.position.z += (d.pos.z - this.camera.position.z) * k;
+      this._lookV.lerp(d.look, kl);
+      this.camera.lookAt(this._lookV);
+      return;
+    }
+    if (this.viewMode === 'first') {
+      this.camera.position.set(eye.x, eye.y, eye.z);
+      this.camera.rotation.order = 'YXZ';
+      this.camera.rotation.set(this.viewPitch, this.viewYaw, 0);
+      return;
+    }
+    const foot = eye.y - this.eyeHeight;
+    const sy = Math.sin(this.viewYaw), cy = Math.cos(this.viewYaw);
+    const cp = Math.cos(this.viewPitch), sp = Math.sin(this.viewPitch);
+    const bx = sy * cp, bz = cy * cp;                       // 玩家后方（随俯仰在水平面收缩）
+
+    // 目标距离 / 高度（俯角越大相机越高、略拉近 → 看到更多前方城市）
+    const desDist = this.camDist * (1 - sp * 0.18);
+    const desHeight = this.camHeight + sp * this.camDist * 0.55;
+
+    // 相机避障：从角色胸口向目标点检测，取安全可达比例
+    const pivotY = foot + 1.2;
+    const tx = eye.x + bx * desDist, ty = foot + desHeight, tz = eye.z + bz * desDist;
+    const clear = this._camClearance(eye.x, pivotY, eye.z, tx, ty, tz);
+
+    // 有效目标距离：无遮挡用满距离；被遮挡时留 0.35m 边距，且不近于 minDist（防后脑勺贴脸）
+    const clearDist = desDist * clear;
+    const tgtDist = clear >= 0.985 ? desDist : Math.max(this.camMinDist, clearDist - 0.35);
+    // 被拉近时同步抬高相机（越过头顶俯视），优先级：星达可见 > 不穿模 > 稳定 > 视野
+    const pull = Math.max(0, desDist - tgtDist) / Math.max(0.001, desDist);   // 0=无遮挡 1=贴近
+    const tgtHeight = desHeight + pull * 1.5;
+
+    // 平滑：只对"距离/高度"做（拉近快、恢复慢），朝向角由鼠标直接驱动 → 零延迟、不切角穿墙
+    this._camDist += (tgtDist - this._camDist) * Math.min(1, dt * (tgtDist < this._camDist ? 16 : 4.5));
+    this._camHeight += (tgtHeight - this._camHeight) * Math.min(1, dt * 8);
+
+    // 相机世界位置（角度即时，径向/高度平滑 → 稳定不抖、不突然跳近跳远）
+    this.camera.position.set(
+      eye.x + bx * this._camDist,
+      foot + this._camHeight,
+      eye.z + bz * this._camDist
+    );
+
+    // 视线落点：角色胸口附近 + 向前推送，平滑跟随避免跳动
+    const lx = eye.x - bx * this.camLookAhead;
+    const lz = eye.z - bz * this.camLookAhead;
+    const ly = foot + this.camLookH;
+    if (!this._lookInit) { this._lookV.set(lx, ly, lz); this._lookInit = true; }
+    const lk = Math.min(1, dt * 12);
+    this._lookV.x += (lx - this._lookV.x) * lk;
+    this._lookV.y += (ly - this._lookV.y) * lk;
+    this._lookV.z += (lz - this._lookV.z) * lk;
+    // 剧情镜头结束后的平滑恢复混入
+    if (this._cineBlend > 0) {
+      const b = this._cineBlend * this._cineBlend;
+      this.camera.position.lerp(this._cineFrom, b);
+      this._lookV.lerp(this._cineFromLook, b);
+      this._cineBlend = Math.max(0, this._cineBlend - dt / 0.9);
+    }
+    this.camera.lookAt(this._lookV.x, this._lookV.y, this._lookV.z);
+  }
+
+  updateMovement(dt) {
+    const ACCEL = 95, DAMP = 9;
+    this.velocity.x -= this.velocity.x * DAMP * dt;
+    this.velocity.z -= this.velocity.z * DAMP * dt;
+    if (this.keys.f) this.velocity.z -= ACCEL * dt;   // 前 = 本地 -z
+    if (this.keys.b) this.velocity.z += ACCEL * dt;
+    if (this.keys.l) this.velocity.x -= ACCEL * dt;   // 左 = 本地 -x
+    if (this.keys.r) this.velocity.x += ACCEL * dt;
+
+    // 视角 yaw 系的前 / 右向量（XZ 平面，第一/第三人称一致）
+    const sy = Math.sin(this.viewYaw), cy = Math.cos(this.viewYaw);
+    const dirX = -sy, dirZ = -cy;                 // 前
+    const rightX = cy, rightZ = -sy;              // 右（forward × up）
+    const wx = rightX * this.velocity.x + dirX * (-this.velocity.z);
+    const wz = rightZ * this.velocity.x + dirZ * (-this.velocity.z);
+    this._wx = wx; this._wz = wz;                 // 世界移动方向（星达朝向用）
+
+    // 分轴碰撞滑动：先 X 后 Z，撞哪轴停哪轴（操作玩家逻辑位置 playerPos）
+    const p = this.playerPos;
+    const footY = p.y - this.eyeHeight;
+    const stuck = this.collision.collides(p.x, p.z, footY);
+    const nx = p.x + wx * dt;
+    if (stuck || !this.collision.collides(nx, p.z, footY)) p.x = nx;
+    const nz = p.z + wz * dt;
+    if (stuck || !this.collision.collides(p.x, nz, footY)) p.z = nz;
+
+    // 低重力跳跃 + 贴合地面（地形 ∪ 可行走平台）
+    if (this.keys.jump && this.onGround) { this.verticalVel = 5.5; this.onGround = false; }
+    this.verticalVel -= 5.0 * dt; // 低重力
+    p.y += this.verticalVel * dt;
+    const gy = this.collision.ground(p.x, p.z) + this.eyeHeight;
+    if (p.y <= gy) { p.y = gy; this.verticalVel = 0; this.onGround = true; }
+
+    // 限制活动范围
+    const r = Math.hypot(p.x, p.z);
+    if (r > this.bounds) {
+      const k = this.bounds / r;
+      p.x *= k; p.z *= k;
+    }
+  }
+
+  updateProximity() {
+    // 乘车中：提示行程状态
+    if (this.riding) {
+      if (this.riding.dest < 0) this.setPrompt('按数字键选择目的地', true);
+      else if (this.transit.arrivedAtDest()) this.setPrompt('[E] 下车', true);
+      else this.setPrompt(`前往 ${STATIONS[this.riding.dest].cn} · [空格] 跳过`, true);
+      return;
+    }
+    if (this.state !== 'playing' || this.dom.info.classList.contains('show')) {
+      this.dom.prompt.classList.remove('show');
+      if (this.dom.info.classList.contains('show')) this.activePoint = null;
+      return;
+    }
+    let near = null, nd = this.interactRange;
+    for (const p of this.points) {
+      const d = Math.hypot(this.playerPos.x - p.pos.x, this.playerPos.z - p.pos.z);
+      if (d < nd) { nd = d; near = p; }
+    }
+    // NPC 第二阶段：进入交谈距离且更近者优先
+    let npcNear = null, npcD = this.npcTalkRange;
+    if (this.npcs) for (const n of this.npcs) {
+      const d = Math.hypot(this.playerPos.x - n.pos.x, this.playerPos.z - n.pos.z);
+      if (d < npcD) { npcD = d; npcNear = n; }
+    }
+    if (npcNear && npcD <= nd) {
+      this.activeNPC = npcNear; this.activePoint = null;
+      this.setPrompt(`[E] 与 ${npcNear.name} 交谈`, true);
+    } else {
+      this.activeNPC = null;
+      this.activePoint = near;
+      // 候车保持：玩家靠近站台即通知列车等候，留出充足登车时间
+      if (near && near.kind === 'board') this.transit.setHold(near.station);
+      else this.transit.setHold(-1);
+      if (near) this.setPrompt(this.promptFor(near), true);
+      else this.dom.prompt.classList.remove('show');
+    }
+  }
+
+  // 动态交互提示（车站按列车状态显示 登车/呼叫/离线）
+  promptFor(p) {
+    if (p.kind === 'board') {
+      if (!this.transit.isOnline()) return '[E] 轨道交通（需先激活城市网络）';
+      if (this.transit.isDwellingAt(p.station)) return '[E] 登车 · 轨道交通';
+      return '[E] 呼叫列车 · 轨道交通';
+    }
+    return p.prompt || '按 [E] 交互';
+  }
+
+  // NPC 名牌 / 环境气泡（第一阶段：距离驱动；环境句用底部 DOM 气泡承载）
+  updateNPCs() {
+    if (!this.npcs) return;
+    const dialogueOpen = this._dialogueOpen || this.dom.info.classList.contains('show');
+    let ambientNPC = null, ambD = 14;
+    for (const n of this.npcs) {
+      const d = Math.hypot(this.playerPos.x - n.pos.x, this.playerPos.z - n.pos.z);
+      const tagF = d < 10 ? Math.min(1, (10 - d) / 3) : 0;                    // 名牌：10m 内
+      n.nameTag.material.opacity = tagF * 0.9;
+      if (d > this.npcTalkRange && d < ambD) { ambD = d; ambientNPC = n; }     // 环境气泡范围：4.5~14m
+    }
+    const showAmb = !dialogueOpen && ambientNPC && this.state === 'playing' && !this.riding;
+    if (showAmb) {
+      if (this._ambFor !== ambientNPC.id) { this._ambFor = ambientNPC.id; this.dom.npcBubble.textContent = `${ambientNPC.name}：“${ambientNPC.ambient}”`; }
+      this.dom.npcBubble.classList.add('show');
+    } else {
+      this._ambFor = null;
+      this.dom.npcBubble.classList.remove('show');
+    }
+  }
+
+  // —— NPC 两阶段对话（第二阶段：E 进入正式对话，最多 3 选项） ——
+  openDialogue(npc) {
+    this._dialogueOpen = true;
+    this.xingdaReact('CURIOUS', 1500);
+    this._startDialogueCam(npc);
+    const opts = npc.options.map(o => ({ label: o.q, fn: () => this.chooseDialogue(npc, o) }));
+    opts.push({ label: '先不聊了', dim: true, fn: () => this.closeDialogue() });
+    this.openPanel({ tag: npc.role, title: npc.name, body: `“${npc.ambient}”\n\n想聊点什么？`, actions: opts });
+  }
+  // 对话镜头：相机移到星达 3/4 侧前方，同框星达与 NPC；星达与 NPC 互相面向
+  _startDialogueCam(npc) {
+    const foot = this.playerPos.y - this.eyeHeight;
+    const A = { x: this.playerPos.x, y: foot, z: this.playerPos.z };
+    const B = npc.pos;
+    let dx = B.x - A.x, dz = B.z - A.z;
+    const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+    // 侧向（右手法线），若该侧有遮挡则翻到另一侧
+    let sx = dz, sz = -dx;
+    const camY = foot + 2.05;
+    if (this.collision.collides(A.x + sx * 2.9, A.z + sz * 2.9, camY - 0.6)) { sx = -sx; sz = -sz; }
+    this._dlgCam = {
+      npc,
+      pos: new THREE.Vector3(A.x + sx * 2.9 - dx * 0.5, camY, A.z + sz * 2.9 - dz * 0.5),
+      look: new THREE.Vector3((A.x + B.x) / 2, (foot + B.y) / 2 + 1.3, (A.z + B.z) / 2)
+    };
+    npc.facePlayer = true;                                   // NPC 转身面向玩家（MoonNPCs 每帧驱动）
+    this.xingda.heading = Math.atan2(dx, dz);                // 星达面向 NPC
+  }
+  _endDialogueCam() {
+    if (!this._dlgCam) return;
+    this._dlgCam.npc.facePlayer = false;
+    this._dlgCam = null;
+    // 复用剧情镜头的平滑交还机制
+    this._cineFrom = this.camera.position.clone();
+    this._cineFromLook = this._lookV.clone();
+    this._cineBlend = 1;
+  }
+  chooseDialogue(npc, opt) {
+    if (!opt._asked) { opt._asked = true; if (opt.effect) this.runNPCEffect(npc, opt.effect); }
+    const opts = npc.options.map(o => ({ label: (o._asked ? '✓ ' : '') + o.q, dim: !!o._asked, fn: () => this.chooseDialogue(npc, o) }));
+    opts.push({ label: '先不聊了', dim: true, fn: () => this.closeDialogue() });
+    this.openPanel({ tag: npc.role, title: npc.name, body: opt.a, actions: opts });
+  }
+  closeDialogue() {
+    this._dialogueOpen = false;
+    if (this.activeNPC) this.activeNPC.talked = true;
+    this._endDialogueCam();
+    this.closeInfo();
+  }
+  // 关键对话 → 推动任务 / 提供下一地点 / 触发剧情信息
+  runNPCEffect(npc, ef) {
+    if (ef.toast) this.showToast(ef.toast, 3400);
+    if (ef.completeQuest) { const q = this.points.find(p => p.id === ef.completeQuest); if (q) this.completeQuest(q); }
+    if (ef.celebrate) this.xingdaCelebrate();
+    this.updateQuestPanel();
+  }
+
+  // 小任务板方向反馈（导航 LEVEL 1：相对玩家朝向与距离）
+  updateGuideDirection() {
+    const cur = this.getCurrentQuest();
+    if (!cur) { this.dom.mqDir.textContent = ''; return; }
+    const dx = cur.pos.x - this.playerPos.x, dz = cur.pos.z - this.playerPos.z;
+    const dist = Math.hypot(dx, dz);
+    const sy = Math.sin(this.viewYaw), cy = Math.cos(this.viewYaw);
+    const fwd = dx * (-sy) + dz * (-cy);        // 玩家前向分量
+    const rgt = dx * cy + dz * (-sy);           // 玩家右向分量
+    const rel = Math.atan2(rgt, fwd);
+    const dirs = ['前方', '右前方', '右侧', '右后方', '后方', '左后方', '左侧', '左前方'];
+    const idx = ((Math.round(rel / (Math.PI / 4)) % 8) + 8) % 8;
+    this.dom.mqDir.textContent = dist < 14 ? '◇ 就在附近' : `◇ ${dirs[idx]} · ${dist.toFixed(0)} m`;
+  }
+
+  // ---------- 任务指引（第二层方向光标 + 第三层目标光柱/光环） ----------
+  createGuidance() {
+    // 目标光柱：柔和半透明脉冲，远距指引，近距淡出交给 [E] 提示
+    const beamMat = new THREE.MeshBasicMaterial({ color: 0x7fe9ff, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    this.objBeam = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.5, 34, 18, 1, true), beamMat);
+    this.objBeam.position.y = 17;
+    // 地面光环：接近目标时柔和高亮确认
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x8ff0c0, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    this.objRing = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.2, 32), ringMat);
+    this.objRing.rotation.x = -Math.PI / 2; this.objRing.position.y = 0.2;
+    this._guideGrp = new THREE.Group();
+    this._guideGrp.add(this.objBeam); this._guideGrp.add(this.objRing);
+    this.scene.add(this._guideGrp);
+
+    // 地面浅光导航（LEVEL 3）：一串流向当前目标的柔光短划，远距出现、近距隐去
+    const PN = 22;
+    this._pathN = PN;
+    this._pathDots = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(0.85, 0.22),
+      new THREE.MeshBasicMaterial({ color: 0x7fe9ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+      PN
+    );
+    this._pathDots.frustumCulled = false;
+    this._pathDots.visible = false;
+    this.scene.add(this._pathDots);
+    this._pathM4 = new THREE.Matrix4();
+    this._pathQ = new THREE.Quaternion();
+    this._pathQFlat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+    this._pathV = new THREE.Vector3();
+    this._pathS = new THREE.Vector3();
+  }
+
+  updateGuidance() {
+    const cur = this.getCurrentQuest();
+    const grp = this._guideGrp, arrow = this.dom.guideArrow;
+    if (!grp) return;
+    if (!cur) { grp.visible = false; arrow.classList.remove('show'); if (this._pathDots) this._pathDots.visible = false; return; }
+    const tx = cur.pos.x, tz = cur.pos.z;
+    const dx = tx - this.playerPos.x, dz = tz - this.playerPos.z;
+    const dist = Math.hypot(dx, dz);
+    const t = this.clock.elapsedTime;
+    // 光柱 + 光环：>12m 显示，近距淡出
+    grp.visible = dist > 12 && !this.riding;
+    if (grp.visible) {
+      grp.position.set(tx, this.collision.ground(tx, tz), tz);
+      this.objBeam.material.opacity = (0.08 + 0.06 * (0.5 + 0.5 * Math.sin(t * 2.2))) * Math.min(1, dist / 60);
+      const rs = 1 + 0.13 * Math.sin(t * 2.6);
+      this.objRing.scale.set(rs, rs, 1);
+      this.objRing.material.opacity = 0.4 * Math.min(1, Math.max(0, (dist - 12) / 24));
+    }
+    // 方向光标：偏离正前方且较远时，屏幕边缘柔和指向（贴中心环绕，不遮核心视野）
+    const sy = Math.sin(this.viewYaw), cy = Math.cos(this.viewYaw);
+    const fwd = dx * (-sy) + dz * (-cy);
+    const rgt = dx * cy + dz * (-sy);
+    const rel = Math.atan2(rgt, fwd);                       // 0=正前 +右 -左
+    if (dist > 16 && Math.abs(rel) > 0.55 && !this.riding && this.state === 'playing') {
+      arrow.classList.add('show');
+      const R = Math.min(window.innerWidth, window.innerHeight) * 0.34;
+      const ax = window.innerWidth / 2 + Math.sin(rel) * R;
+      const ay = window.innerHeight / 2 - Math.cos(rel) * R * 0.72;
+      arrow.style.transform = `translate(${ax}px, ${ay}px) rotate(${rel}rad)`;
+    } else arrow.classList.remove('show');
+
+    // 地面浅光导航：>26m 时在脚下铺一条流向目标的柔光路径（波动流向目标方向）
+    const dots = this._pathDots;
+    if (!dots) return;
+    const showPath = !!cur && dist > 26 && !this.riding && this.state === 'playing';
+    dots.visible = showPath;
+    if (showPath) {
+      const ux = dx / dist, uz = dz / dist;
+      const span = Math.min(dist - 6, 72);                 // 最多铺 72m，指向即可不铺满
+      const yawX = Math.atan2(-uz, ux);                    // 让短划长轴对齐行进方向
+      for (let i = 0; i < this._pathN; i++) {
+        const s = 4 + (i / (this._pathN - 1)) * span;
+        const px = this.playerPos.x + ux * s, pz = this.playerPos.z + uz * s;
+        const py = this.collision.ground(px, pz) + 0.22;
+        const wave = 0.55 + 0.45 * Math.max(0, Math.sin(t * 2.8 - i * 0.55));   // 向目标流动
+        this._pathQ.setFromAxisAngle(this._pathV.set(0, 1, 0), yawX).multiply(this._pathQFlat);
+        this._pathM4.compose(this._pathV.set(px, py, pz), this._pathQ, this._pathS.set(wave, wave, wave));
+        this._pathDots.setMatrixAt(i, this._pathM4);
+      }
+      this._pathDots.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  setPrompt(text, show) {
+    if (this.dom.prompt.textContent !== text) this.dom.prompt.textContent = text;
+    this.dom.prompt.classList.toggle('show', !!show);
+  }
+
+  // ----------------------------------------------------------
+  // 主循环
+  // ----------------------------------------------------------
+  animate() {
+    this.raf = requestAnimationFrame(() => this.animate());
+    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const t = this.clock.elapsedTime;
+    for (const fn of this.updatables) fn(dt, t);
+    if (this.riding) {
+      // 乘车：玩家绑定列车座位，星达坐进车厢（隐藏避免穿模），相机看窗外
+      this.transit.seatWorld(this._seatV || (this._seatV = new THREE.Vector3()));
+      this.playerPos.set(this._seatV.x, this._seatV.y, this._seatV.z);
+      this.xingda.setVisible(false);
+      this.camera.position.copy(this._seatV);
+      this.camera.rotation.order = 'YXZ';
+      this.camera.rotation.set(this.viewPitch, this.viewYaw, 0);
+    } else {
+      if (this.locked) this.updateMovement(dt);
+      this.xingda.setVisible(this.viewMode === 'third' || !!this._dlgCam);   // 对话镜头强制可见（第一人称也入镜）
+      // 星达跟随玩家（脚底 = playerPos.y - eyeHeight），朝移动方向
+      const footY = this.playerPos.y - this.eyeHeight;
+      const moving = this.locked && (Math.abs(this._wx || 0) > 0.3 || Math.abs(this._wz || 0) > 0.3);
+      const running = moving && this.keys.f && (this.keys.l || this.keys.r);
+      this._moveDir = this._moveDir || new THREE.Vector3();
+      this._moveDir.set(this._wx || 0, 0, this._wz || 0);
+      this.xingda.update(dt, t, { x: this.playerPos.x, y: footY, z: this.playerPos.z }, moving ? this._moveDir : null, { moving, running });
+      this.updateCamera(dt);
+    }
+    this.updateProximity();
+    this.updateGuideDirection();
+    this.updateNPCs();
+    this.updateGuidance();
+    this._updateLaunch(dt);
+    this._checkCuriosity(dt);
+    // 坐标 HUD（中文优先）
+    if (this.dom) this.dom.coords.innerHTML =
+      `月球前哨 · 01 区<br>坐标 ${this.playerPos.x.toFixed(0)}, ${this.playerPos.z.toFixed(0)}<br>重力 0.16g · ${this.viewMode === 'third' ? '第三人称' : '第一人称'}`;
+    this.composer.render();
+  }
+
+  onResize = () => {
+    if (!this.camera) return;
+    this.camera.aspect = window.innerWidth / window.innerHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.composer.setSize(window.innerWidth, window.innerHeight);
+  };
+}
+
+// ============================================================
+// 启动
+// ============================================================
+const moon = new MoonScene(document.getElementById('app'));
+moon.start();
+if (!sessionStorage.getItem('opening2126Seen')) {
+  new OpeningScene({
+    video: './assets/moon-civilization.mp4',
+    onEnter: () => {
+      moon.dom.start.classList.add('hide');
+      if (moon.renderer.domElement.requestPointerLock) moon.lockPointer();
+      else moon.state = 'playing';
+    },
+  }).start();
+}
+// 暴露到全局，方便后续从统一 App / 场景管理器调用
+window.MoonScene = MoonScene;
+window.moon = moon;
+// 总工程整合层：稳定公共 API + postMessage 桥（详见 js/MoonIntegration.js）
+import { mountMoonModule } from './js/MoonIntegration.js';
+window.MoonModule = mountMoonModule(moon);
+</script>
+</body>
+</html>

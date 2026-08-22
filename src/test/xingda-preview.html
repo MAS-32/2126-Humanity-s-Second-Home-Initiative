@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>星达模型预览</title>
+<style>body{margin:0;background:#16202c;overflow:hidden}#tip{position:fixed;top:10px;left:12px;color:#9fd;font:12px sans-serif}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="tip">星达模型预览 · eval 控制: setView('front'|'side'|'back') · setState('HAPPY'...)</div>
+<script type="module">
+import * as THREE from 'three';
+import { XingdaController } from '../js/Xingda.js';
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x16202c);
+const cam = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.1, 100);
+const r = new THREE.WebGLRenderer({ antialias:true });
+r.setSize(innerWidth, innerHeight);
+r.shadowMap.enabled = true;
+document.body.appendChild(r.domElement);
+scene.add(new THREE.HemisphereLight(0xdff2ff, 0x3a4a55, 1.25));
+const key = new THREE.DirectionalLight(0xfff2e0, 1.6); key.position.set(2.5, 4.5, 3); key.castShadow=true; scene.add(key);
+const fill = new THREE.DirectionalLight(0x9fd0ff, 0.6); fill.position.set(-3, 2, -2); scene.add(fill);
+const gnd = new THREE.Mesh(new THREE.CircleGeometry(4, 40), new THREE.MeshStandardMaterial({ color:0x2a3644, roughness:0.95 }));
+gnd.rotation.x = -Math.PI/2; gnd.receiveShadow = true; scene.add(gnd);
+const grid = new THREE.PolarGridHelper(4, 8, 5, 40, 0x446, 0x334); grid.position.y=0.01; scene.add(grid);
+
+const xd = new XingdaController(scene);
+window.xd = xd;
+window.setState = (s) => xd.setState(s);
+window.setView = (v) => {
+  if (v==='front') { cam.position.set(0, 1.35, 3.4); }
+  else if (v==='side') { cam.position.set(3.4, 1.3, 0); }
+  else if (v==='back') { cam.position.set(0, 1.5, -3.4); }
+  else if (v==='top34') { cam.position.set(1.8, 2.2, 2.6); }
+  cam.lookAt(0, 0.9, 0);
+};
+window.setView('front');
+let t = 0;
+function loop(){ requestAnimationFrame(loop); t += 0.016; xd.update(0.016, t, {x:0,y:0,z:0}, null, {}); r.render(scene, cam); }
+loop();
+</script>
+</body>
+</html>

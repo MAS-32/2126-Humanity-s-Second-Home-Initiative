@@ -1,0 +1,29 @@
+{
+  "name": "moon-outpost-2126",
+  "version": "1.0.0",
+  "private": true,
+  "description": "《2126：人类第二家园计划》· 月球前哨城市独立模块（含开场动画 / 月球主场景 / Solar Hub / 火星曙光城），可单独运行与部署，预留总工程整合接口。",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/preview.mjs",
+    "start": "node scripts/preview.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node src/test/walk.test.mjs && node src/opening/OpeningScene.test.mjs"
+  },
+  "keywords": [
+    "2126",
+    "three.js",
+    "moon",
+    "solar-system",
+    "webgl",
+    "static-site"
+  ],
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
