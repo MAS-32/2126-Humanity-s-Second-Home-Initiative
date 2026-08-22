@@ -58,6 +58,8 @@ export function buildSpaceElevator(scene) {
   let elapsed = 0;
   return {
     portal,
+    collider: { x: ELEVATOR_POS.x, z: ELEVATOR_POS.z, r: 10.8 }, // 基座平台不可穿越
+    blocker: anchor, // 相机避障
     update(dt) {
       elapsed += dt;
       climbers.forEach(({ mesh, offset, speed }) => {

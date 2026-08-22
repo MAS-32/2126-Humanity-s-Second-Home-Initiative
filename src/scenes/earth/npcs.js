@@ -1,46 +1,125 @@
 import * as THREE from 'three';
 import { WEATHER_STATION_POS, FARM_TOWER_POS } from './city.js';
+import { makeNameTag } from './nametag.js';
 
 // EarthScene 的 NPC 机器人与对话数据。
 // 三个实体 NPC（M-07 / A-12 / 登舱引导员）+ 展厅解说 AI（绑定展厅控制台）。
+// 造型按参考图差异化：M-07 头顶气象桅杆（旋转风速杯+风向标），A-12 履带底座+绿色护目镜。
 // 对话数据直接以代码可用结构导出，配合 createBranchDialogue 使用。
 
 function makeRobotBody({ bodyColor, accentColor, style }) {
   const group = new THREE.Group();
   const bodyMaterial = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.4, metalness: 0.2 });
   const accent = new THREE.MeshBasicMaterial({ color: accentColor });
+  const extras = {}; // 需要在 update 中动画的部件
 
-  // 悬浮式机身（统一剪影：躯干 + 头 + 特征件 + 底部光环）
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.4, 6, 14), bodyMaterial);
-  torso.position.y = 0.85;
-  group.add(torso);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), bodyMaterial);
-  head.position.y = 1.42;
-  group.add(head);
-  const visor = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10, -Math.PI / 3, (Math.PI * 2) / 3, Math.PI / 3, Math.PI / 3), accent);
-  visor.position.set(0, 1.42, 0.08);
-  group.add(visor);
-
-  if (style === 'dish') {
-    // M-07：头顶小型气象雷达碟
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 6), bodyMaterial);
-    mast.position.y = 1.72;
-    group.add(mast);
-    const dish = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2.5), accent);
-    dish.position.y = 1.88;
-    dish.rotation.x = Math.PI / 2.6;
-    group.add(dish);
-  } else if (style === 'leaf') {
-    // A-12：肩部光合作用叶板
+  if (style === 'weather') {
+    // M-07（参考图 4）：白色运维机体 + 胸前青色面板 + 头顶气象桅杆
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.45, 6, 14), bodyMaterial);
+    torso.position.y = 0.85;
+    group.add(torso);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.06), accent);
+    panel.position.set(0, 0.92, 0.31);
+    group.add(panel);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.34), bodyMaterial);
+    head.position.y = 1.42;
+    group.add(head);
+    // 双目青色镜头
     [-1, 1].forEach((side) => {
-      const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), new THREE.MeshStandardMaterial({ color: 0x58b08c, roughness: 0.7 }));
-      leaf.scale.set(0.25, 1, 0.6);
-      leaf.position.set(side * 0.42, 1.1, 0);
-      leaf.rotation.z = side * 0.5;
-      group.add(leaf);
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 12), accent);
+      lens.rotation.x = Math.PI / 2;
+      lens.position.set(side * 0.1, 1.43, 0.19);
+      group.add(lens);
     });
-  } else if (style === 'signal') {
-    // 引导员：双肩信号灯
+    // 气象桅杆：立杆 + 风速杯（旋转）+ 风向标
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.5, 6), bodyMaterial);
+    mast.position.y = 1.82;
+    group.add(mast);
+    const cups = new THREE.Group();
+    cups.position.y = 2.06;
+    for (let i = 0; i < 3; i += 1) {
+      const angle = (i / 3) * Math.PI * 2;
+      const armLen = 0.14;
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, armLen, 6), bodyMaterial);
+      arm.rotation.z = Math.PI / 2;
+      arm.rotation.y = angle;
+      arm.position.set(Math.cos(angle) * armLen / 2, 0, -Math.sin(angle) * armLen / 2);
+      cups.add(arm);
+      const cup = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2), accent);
+      cup.position.set(Math.cos(angle) * armLen, 0, -Math.sin(angle) * armLen);
+      cup.rotation.z = Math.PI / 2;
+      cup.rotation.y = angle;
+      cups.add(cup);
+    }
+    group.add(cups);
+    extras.cups = cups;
+    const vane = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.2, 4), bodyMaterial);
+    vane.rotation.z = -Math.PI / 2;
+    vane.position.set(0.16, 1.94, 0);
+    group.add(vane);
+    // 肩部小型传感翼
+    [-1, 1].forEach((side) => {
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.3), bodyMaterial);
+      wing.position.set(side * 0.42, 1.05, 0);
+      group.add(wing);
+    });
+  } else if (style === 'treads') {
+    // A-12（参考图 3）：履带底座 + 圆润白机身 + 绿色护目镜 + 机械臂
+    [-1, 1].forEach((side) => {
+      const tread = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.2, 0.52),
+        new THREE.MeshStandardMaterial({ color: 0x3a4a52, roughness: 0.8 }),
+      );
+      tread.position.set(side * 0.2, 0.12, 0);
+      group.add(tread);
+      for (let i = -1; i <= 1; i += 1) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.2, 10), bodyMaterial);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(side * 0.2, 0.12, i * 0.17);
+        group.add(wheel);
+      }
+    });
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.44), bodyMaterial);
+    chassis.position.y = 0.3;
+    group.add(chassis);
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.4, 6, 14), bodyMaterial);
+    torso.position.y = 0.78;
+    group.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), bodyMaterial);
+    head.position.y = 1.28;
+    group.add(head);
+    // 绿色护目镜带（横过脸部）
+    const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.245, 0.245, 0.09, 18, 1, true, -Math.PI / 2.6, Math.PI / 1.3), accent);
+    visor.position.y = 1.29;
+    group.add(visor);
+    // 右侧机械臂（两节 + 软管头）
+    const armBase = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.3, 8), bodyMaterial);
+    armBase.position.set(0.36, 0.86, 0.1);
+    armBase.rotation.z = -0.7;
+    group.add(armBase);
+    const armTip = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.26, 8), bodyMaterial);
+    armTip.position.set(0.5, 0.66, 0.22);
+    armTip.rotation.z = -0.3;
+    armTip.rotation.x = 0.5;
+    group.add(armTip);
+    const nozzle = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), accent);
+    nozzle.position.set(0.54, 0.55, 0.33);
+    group.add(nozzle);
+    // 背部小型营养液罐
+    const tank = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.16, 4, 10), new THREE.MeshStandardMaterial({ color: 0x9fe0c0, roughness: 0.4 }));
+    tank.position.set(0, 0.85, -0.3);
+    group.add(tank);
+  } else {
+    // 引导员：悬浮服务机体 + 双肩信号灯（默认通用剪影）
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.4, 6, 14), bodyMaterial);
+    torso.position.y = 0.85;
+    group.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), bodyMaterial);
+    head.position.y = 1.42;
+    group.add(head);
+    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10, -Math.PI / 3, (Math.PI * 2) / 3, Math.PI / 3, Math.PI / 3), accent);
+    visor.position.set(0, 1.42, 0.08);
+    group.add(visor);
     [-1, 1].forEach((side) => {
       const light = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), accent);
       light.position.set(side * 0.36, 1.18, 0);
@@ -53,26 +132,30 @@ function makeRobotBody({ bodyColor, accentColor, style }) {
     new THREE.MeshBasicMaterial({ color: accentColor, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
   halo.rotation.x = Math.PI / 2;
-  halo.position.y = 0.32;
+  halo.position.y = 0.06;
   group.add(halo);
-  return group;
+  return { group, extras };
 }
 
 export function buildNpcs(scene) {
   const npcs = [];
-  const place = (name, x, z, options) => {
-    const group = makeRobotBody(options);
+  const place = (name, label, x, z, options) => {
+    const { group, extras } = makeRobotBody(options);
     group.name = name;
     group.position.set(x, 0, z);
+    // 悬浮名牌
+    const tag = makeNameTag(label);
+    tag.position.y = 2.45;
+    group.add(tag);
     scene.add(group);
-    npcs.push(group);
+    npcs.push({ group, extras });
     return group;
   };
 
   // M-07：气象站旁；A-12：农场塔旁；引导员：太空电梯登舱门旁
-  const m07 = place('npc-m07', WEATHER_STATION_POS.x - 2.5, WEATHER_STATION_POS.z + 3.5, { bodyColor: 0xe8f1f5, accentColor: 0x4fa8e0, style: 'dish' });
-  const a12 = place('npc-a12', FARM_TOWER_POS.x + 3.5, FARM_TOWER_POS.z - 3, { bodyColor: 0xf2f7ee, accentColor: 0x58c98c, style: 'leaf' });
-  const guide = place('npc-guide', 27.5, -27, { bodyColor: 0xf7f2ea, accentColor: 0xffa54d, style: 'signal' });
+  const m07 = place('npc-m07', 'M-07 · 气象运维', WEATHER_STATION_POS.x - 2.5, WEATHER_STATION_POS.z + 3.5, { bodyColor: 0xf0f4f6, accentColor: 0x4fa8e0, style: 'weather' });
+  const a12 = place('npc-a12', 'A-12 · 垂直农场', FARM_TOWER_POS.x + 3.5, FARM_TOWER_POS.z - 3, { bodyColor: 0xf5f7f2, accentColor: 0x58c98c, style: 'treads' });
+  const guide = place('npc-guide', '登舱引导 · 赤道一号', 27.5, -27, { bodyColor: 0xf7f2ea, accentColor: 0xffa54d, style: 'signal' });
 
   let elapsed = 0;
   return {
@@ -81,9 +164,10 @@ export function buildNpcs(scene) {
     guide,
     update(dt) {
       elapsed += dt;
-      npcs.forEach((npc, i) => {
-        npc.position.y = Math.sin(elapsed * 1.5 + i * 2.1) * 0.06;
-        npc.rotation.y = Math.sin(elapsed * 0.5 + i) * 0.25;
+      npcs.forEach(({ group, extras }, i) => {
+        group.position.y = Math.sin(elapsed * 1.5 + i * 2.1) * 0.05;
+        group.rotation.y = Math.sin(elapsed * 0.5 + i) * 0.22;
+        if (extras.cups) extras.cups.rotation.y += dt * 3.2; // 风速杯持续旋转
       });
     },
   };
@@ -188,9 +272,10 @@ export const NPC_DIALOGUES = {
         id: 'goal',
         title: '太阳系开发的终极目标',
         lines: [
+          '先回答一个几乎每个访客都会问的问题：地球已经这么好了，为什么还要去月球和火星？因为人类不是在逃离地球——恰恰相反，是地球被建设得足够好，我们才有余力向外走。',
           '路线图很简单：地球是家园，月球是前哨，火星是第二家园。但终点不止于此。',
           '月球提供资源和跳板，火星验证行星级改造，奥尼尔圆柱提供不依赖行星的生存空间，戴森群提供能源。',
-          '当这些拼在一起，人类就不再是“住在一颗行星上的物种”，而是“以整个太阳系为家的文明”。',
+          '当这些拼在一起，人类就不再是“住在一颗行星上的物种”，而是“以整个太阳系为家的文明”。单一行星承载全部文明的风险，从此成为历史。',
           '你今天的地月航程，就是这条路线图上最普通的一次通勤。这恰恰是这个时代最了不起的地方。',
         ],
       },
@@ -207,6 +292,7 @@ export const NPC_DIALOGUES = {
         lines: [
           '赤道一号每天双向运行 22 个班次，单程爬升到同步轨道站约 6 小时，之后换乘摆渡船，地月全程约 26 小时。',
           '每个运载舱载客 24 人，或者等价货运。今天的舱位很空，你和你的小伙伴可以坐靠窗的位置。',
+          '顺带说明：这条航线不是“离开地球”的逃亡线，而是通勤线——大多数乘客一周内就会返程。地球是家，月球只是家的延伸。',
         ],
       },
       {

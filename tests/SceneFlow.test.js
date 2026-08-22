@@ -26,9 +26,17 @@ describe('actual scene integration flow', () => {
     manager.register('earth', createEarthScene).register('moon', createMoonScene).register('mars', createMarsScene);
 
     const interact = async (name) => {
-      const object = manager.getCurrentScene().scene.getObjectByName(name);
+      const scene = manager.getCurrentScene().scene;
+      const object = scene.getObjectByName(name);
       object.updateWorldMatrix(true, true);
-      camera.lookAt(object.getWorldPosition(new THREE.Vector3()));
+      const targetPos = object.getWorldPosition(new THREE.Vector3());
+      // 第三人称：交互候选基于玩家（星达）与目标的距离，先把星达移到目标旁
+      const avatar = scene.getObjectByName('xingda');
+      if (avatar) {
+        avatar.position.set(targetPos.x + 1.5, 0, targetPos.z + 1.5);
+        avatar.updateMatrixWorld(true);
+      }
+      camera.lookAt(targetPos);
       camera.updateMatrixWorld(true);
       interaction.update();
       expect(interaction.active?.root).toBe(object);

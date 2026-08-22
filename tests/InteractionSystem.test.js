@@ -82,4 +82,54 @@ describe('InteractionSystem', () => {
     expect(interaction.active?.root).toBe(group);
     interaction.dispose();
   });
+
+  it('proximity mode selects the in-range entry best aligned with camera facing', () => {
+    const { interaction, prompt } = setup(); // 相机朝 -z
+    const source = new THREE.Group();
+    source.updateMatrixWorld(true);
+    interaction.setProximitySource(source);
+
+    const ahead = new THREE.Group();
+    ahead.position.set(0, 0, -3);
+    ahead.updateMatrixWorld(true);
+    const behind = new THREE.Group();
+    behind.position.set(0, 0, 3);
+    behind.updateMatrixWorld(true);
+    const onInteract = vi.fn();
+    interaction.add(ahead, { text: '前方目标', distance: 5, onInteract });
+    interaction.add(behind, { text: '后方目标', distance: 5, onInteract() {} });
+
+    interaction.update();
+    expect(interaction.active?.root).toBe(ahead); // 朝向打分胜出
+    expect(prompt.show).toHaveBeenLastCalledWith('前方目标');
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }));
+    expect(onInteract).toHaveBeenCalledOnce();
+    interaction.dispose();
+  });
+
+  it('proximity mode ignores out-of-range entries and null source restores raycast', () => {
+    const { interaction } = setup();
+    const source = new THREE.Group();
+    source.updateMatrixWorld(true);
+    interaction.setProximitySource(source);
+
+    const far = new THREE.Group();
+    far.position.set(0, 0, -20);
+    far.updateMatrixWorld(true);
+    interaction.add(far, { text: '太远', distance: 5, onInteract() {} });
+    interaction.update();
+    expect(interaction.active).toBeNull(); // 超出距离无候选
+
+    // 传 null 回退到准星模式（Moon/Mars 路径不变）
+    interaction.setProximitySource(null);
+    const near = new THREE.Group();
+    const child = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+    child.position.z = -3;
+    near.add(child);
+    near.updateMatrixWorld(true);
+    interaction.add(near, { text: '准星目标', distance: 5, onInteract() {} });
+    interaction.update();
+    expect(interaction.active?.root).toBe(near);
+    interaction.dispose();
+  });
 });

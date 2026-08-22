@@ -13,14 +13,21 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
   page.on('pageerror', (error) => errors.push(error.message));
 
   await page.goto('/');
-  await expect(page.locator('#scene-label')).toHaveText('EARTH 2126 · 中央广场');
+  await expect(page.locator('#scene-label')).toHaveText('2126 · 地球');
   await expect(page.locator('canvas')).toHaveCount(1);
 
   async function interactWith(objectName) {
     const activeName = await page.evaluate((name) => {
       const game = window.__GAME__;
-      const object = game.sceneManager.getCurrentScene().scene.getObjectByName(name);
+      const scene = game.sceneManager.getCurrentScene().scene;
+      const object = scene.getObjectByName(name);
       const worldPosition = object.getWorldPosition(new window.__THREE_VECTOR3__());
+      // 第三人称：候选基于星达与目标的距离，先把星达移到目标旁
+      const avatar = scene.getObjectByName('xingda');
+      if (avatar) {
+        avatar.position.set(worldPosition.x + 1.5, 0, worldPosition.z + 1.5);
+        avatar.updateMatrixWorld(true);
+      }
       game.camera.lookAt(worldPosition);
       game.camera.updateMatrixWorld(true);
       game.interaction.update();
@@ -48,7 +55,7 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
     await expect(page.locator('#scene-label')).toHaveText('MARS TEST SCENE');
     await expect.poll(() => page.evaluate(() => window.__GAME__.state.get('arrivedMars'))).toBe(true);
     await interactWith('earth-portal');
-    await expect(page.locator('#scene-label')).toHaveText('EARTH 2126 · 中央广场');
+    await expect(page.locator('#scene-label')).toHaveText('2126 · 地球');
   }
 
   await runCycle();
@@ -62,7 +69,7 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
 
 test('pointer lock movement works and blur clears held movement', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#scene-label')).toHaveText('EARTH 2126 · 中央广场');
+  await expect(page.locator('#scene-label')).toHaveText('2126 · 地球');
   const canvas = page.locator('canvas');
   await canvas.click({ position: { x: 300, y: 300 } });
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.tagName)).toBe('CANVAS');

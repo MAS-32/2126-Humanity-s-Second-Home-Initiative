@@ -71,13 +71,44 @@ export function createAscent({ ctx, scene, avatar }) {
   };
 
   let props = null;
+  let skipHint = null;
+  let spaceHeld = false;
+  let spaceHoldTime = 0;
+
+  // 跳过设计：E / Esc 即按即快进；空格需长按 0.6s（防误触，黑客松演示友好）
+  const SPACE_HOLD_TO_SKIP = 0.6;
+
+  const skipToFinale = () => {
+    t = Math.max(t, PHASE.space);
+  };
 
   const onKeyDown = (event) => {
     if (!active) return;
-    if (event.code === 'KeyE' || event.code === 'Space' || event.code === 'Escape') {
-      // 允许跳过：直接快进到淡出阶段（黑客松演示友好）
-      t = Math.max(t, PHASE.space);
+    if (event.code === 'Space') {
+      if (!event.repeat) {
+        spaceHeld = true;
+        spaceHoldTime = 0;
+      }
+      return;
     }
+    if (event.code === 'KeyE' || event.code === 'Escape') skipToFinale();
+  };
+  const onKeyUp = (event) => {
+    if (event.code === 'Space') {
+      spaceHeld = false;
+      spaceHoldTime = 0;
+    }
+  };
+
+  const showSkipHint = () => {
+    skipHint = document.createElement('div');
+    skipHint.className = 'earth-skip-hint';
+    skipHint.textContent = '按住 空格 跳过演出 · 按 E 快进';
+    document.body.append(skipHint);
+  };
+  const hideSkipHint = () => {
+    skipHint?.remove();
+    skipHint = null;
   };
 
   const api = {
@@ -95,6 +126,10 @@ export function createAscent({ ctx, scene, avatar }) {
       ctx.interaction.setEnabled?.(false);
       ctx.ui.flash('赤道一号：登舱确认，出发程序启动');
       document.addEventListener('keydown', onKeyDown);
+      document.addEventListener('keyup', onKeyUp);
+      spaceHeld = false;
+      spaceHoldTime = 0;
+      showSkipHint();
 
       cameraStart.copy(ctx.camera.position);
       avatarStart.copy(avatar.position);
@@ -108,6 +143,14 @@ export function createAscent({ ctx, scene, avatar }) {
     update(dt) {
       if (!active) return;
       t += dt;
+      // 长按空格累计，达到阈值快进到最后阶段
+      if (spaceHeld) {
+        spaceHoldTime += dt;
+        if (spaceHoldTime >= SPACE_HOLD_TO_SKIP) {
+          spaceHeld = false;
+          skipToFinale();
+        }
+      }
       const camera = ctx.camera;
 
       if (t < PHASE.boarding) {
@@ -178,6 +221,8 @@ export function createAscent({ ctx, scene, avatar }) {
       finished = true;
       active = false;
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keyup', onKeyUp);
+      hideSkipHint();
       fadeCleanup = playFade();
       // 先恢复输入，再转场：SceneManager 会捕获 enabled=true 并传递给下一场景
       ctx.player.setEnabled?.(true);
@@ -187,6 +232,8 @@ export function createAscent({ ctx, scene, avatar }) {
 
     dispose() {
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keyup', onKeyUp);
+      hideSkipHint();
       if (fadeCleanup) {
         fadeCleanup();
         fadeCleanup = null;

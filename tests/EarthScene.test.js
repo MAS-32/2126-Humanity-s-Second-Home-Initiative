@@ -13,6 +13,7 @@ function makeCtx() {
     setEnabled: vi.fn(),
     setThirdPerson: vi.fn(),
     setFirstPerson: vi.fn(),
+    setObstacles: vi.fn(),
     teleport: vi.fn(),
     keys: new Set(),
   };
@@ -48,6 +49,11 @@ describe('EarthScene', () => {
     expect(ctx.player.setThirdPerson).toHaveBeenCalledWith(
       expect.objectContaining({ target: earth.scene.getObjectByName('xingda') }),
     );
+    // 第三人称配套：碰撞障碍注入 + 交互候选源指向星达
+    expect(ctx.player.setObstacles).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ r: expect.any(Number) })]));
+    expect(ctx.interaction.proximitySource).toBe(earth.scene.getObjectByName('xingda'));
+    // 目标引导 HUD 已创建
+    expect(document.querySelector('.earth-objective')).toBeTruthy();
   });
 
   it('hall guide opens modal branch dialogue, marks visitedSolarSystem, restores input on close', () => {
@@ -115,8 +121,10 @@ describe('EarthScene', () => {
     expect(text).toBe('进入太空电梯');
     onInteract();
     expect(ctx.sceneManager.go).not.toHaveBeenCalled(); // 不再立即跳场景
+    expect(document.querySelector('.earth-skip-hint')).toBeTruthy(); // 演出期间显示跳过提示
     for (let i = 0; i < 120 && !ctx.sceneManager.go.mock.calls.length; i += 1) earth.update(0.1);
     expect(ctx.sceneManager.go).toHaveBeenCalledWith('moon');
+    expect(document.querySelector('.earth-skip-hint')).toBeNull(); // 演出结束提示移除
     // 演出创建了临时地月视觉对象（随 dispose 清理）
     expect(earth.scene.getObjectByName('ascent-moon')).toBeTruthy();
     expect(earth.scene.getObjectByName('ascent-earth')).toBeTruthy();
@@ -134,10 +142,12 @@ describe('EarthScene', () => {
 
     expect(document.querySelector('.earth-dialog')).toBeNull();
     expect(document.querySelector('.earth-fade')).toBeNull();
+    expect(document.querySelector('.earth-objective')).toBeNull(); // 引导 HUD 已移除
     expect(earth.scene.children.length).toBe(0);
     expect(ctx.player.setFirstPerson).toHaveBeenCalled();
     expect(ctx.player.setEnabled).toHaveBeenLastCalledWith(true);
     expect(ctx.interaction.enabled).toBe(true);
+    expect(ctx.interaction.proximitySource).toBeNull(); // 候选源已归还，不泄漏到其他场景
   });
 
   it('repeated create/dispose cycles do not accumulate DOM or interaction entries', () => {

@@ -174,6 +174,8 @@ export function buildCivilizationHall(scene) {
   let elapsed = 0;
   return {
     consoleObject: consoleGroup,
+    collider: { x: HALL_POS.x, z: HALL_POS.z, r: 10.6 }, // 玩家不可穿入展厅基座
+    blocker: platform, // 相机避障
     update(dt) {
       elapsed += dt;
       hologram.rotation.y += dt * 0.12;

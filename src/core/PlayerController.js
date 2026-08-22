@@ -10,10 +10,13 @@ const DEFAULT_TP_OPTIONS = {
   lookHeight: 1.2, // 注视点相对角色原点的高度
   rotateSensitivity: 0.0022,
   cameraDamping: 9, // 越大跟随越紧；基于 1 - exp(-damping * dt) 的帧率无关阻尼
+  turnDamping: 12, // 角色朝向移动方向的平滑转向阻尼
   minPitch: -0.35, // 最低俯角（略微平视下方）
   maxPitch: 1.15, // 最高仰角（避免翻到地底/天顶）
   defaultPitch: 0.34,
   moveSpeed: null, // 缺省沿用 speed
+  cameraObstacles: null, // 可选：相机避障 mesh 列表（场景注入的主要建筑）
+  playerRadius: 0.45, // 角色碰撞半径（配合 setObstacles 推挤）
 };
 
 export class PlayerController {
@@ -43,6 +46,12 @@ export class PlayerController {
     this.tp = null;
     this.orbitYaw = 0;
     this.orbitPitch = DEFAULT_TP_OPTIONS.defaultPitch;
+    // 玩家圆形障碍推挤（场景注入，[{x, z, r}]；默认空 = 无碰撞）
+    this.obstacles = [];
+    // 相机避障 raycast 的复用对象（仅第三人称且注入 cameraObstacles 时使用）
+    this.cameraRaycaster = new THREE.Raycaster();
+    this.tmpLook = new THREE.Vector3();
+    this.tmpDir = new THREE.Vector3();
 
     this.onCanvasClick = () => {
       if (this.enabled && this.document.pointerLockElement !== this.domElement) {
@@ -103,8 +112,17 @@ export class PlayerController {
   setFirstPerson() {
     this.mode = 'first-person';
     this.tp = null;
+    this.obstacles = [];
     this.keys.clear();
     this.camera.rotation.order = 'YXZ';
+  }
+
+  /**
+   * 设置玩家圆形障碍（简单推挤碰撞，[{x, z, r}]）。
+   * 只覆盖主要不可穿越建筑；空数组 = 无碰撞。场景 dispose 时随 setFirstPerson 清空。
+   */
+  setObstacles(obstacles) {
+    this.obstacles = Array.isArray(obstacles) ? obstacles : [];
   }
 
   snapCameraToTarget() {
@@ -172,13 +190,48 @@ export class PlayerController {
         const moveSpeed = tp.moveSpeed ?? this.speed;
         tp.target.position.x += moveX * moveSpeed * delta;
         tp.target.position.z += moveZ * moveSpeed * delta;
-        // 角色朝向移动方向
-        tp.target.rotation.y = Math.atan2(moveX, moveZ);
+        // 简单碰撞：把角色推出圆形障碍（覆盖主要建筑即可，不做完整物理）
+        if (this.obstacles.length > 0) {
+          const p = tp.target.position;
+          const min = tp.playerRadius;
+          for (const obstacle of this.obstacles) {
+            const dx = p.x - obstacle.x;
+            const dz = p.z - obstacle.z;
+            const dist = Math.hypot(dx, dz);
+            const limit = obstacle.r + min;
+            if (dist < limit && dist > 1e-4) {
+              p.x = obstacle.x + (dx / dist) * limit;
+              p.z = obstacle.z + (dz / dist) * limit;
+            }
+          }
+        }
+        // 角色朝向移动方向（短弧平滑插值，停止时不抽搐）
+        const desiredYaw = Math.atan2(moveX, moveZ);
+        let diff = desiredYaw - tp.target.rotation.y;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        tp.target.rotation.y += diff * (1 - Math.exp(-tp.turnDamping * delta));
       }
     }
 
     // 相机阻尼跟随：帧率无关的指数平滑，目标静止时收敛不抽搐
     const desired = this.getDesiredCameraPosition(new THREE.Vector3());
+    // 相机避障：从注视点向期望机位做 raycast，被建筑挡住则把相机拉近
+    if (tp.cameraObstacles?.length) {
+      const look = this.getLookTarget(this.tmpLook);
+      this.tmpDir.copy(desired).sub(look);
+      const fullDistance = this.tmpDir.length();
+      if (fullDistance > 1e-4) {
+        this.tmpDir.normalize();
+        this.cameraRaycaster.set(look, this.tmpDir);
+        this.cameraRaycaster.far = fullDistance;
+        const hits = this.cameraRaycaster.intersectObjects(tp.cameraObstacles, true);
+        if (hits.length > 0) {
+          const clamped = Math.max(hits[0].distance - 0.35, 1.2);
+          desired.copy(look).addScaledVector(this.tmpDir, Math.min(clamped, fullDistance));
+        }
+      }
+    }
     const alpha = 1 - Math.exp(-tp.cameraDamping * delta);
     this.camera.position.lerp(desired, alpha);
     this.camera.lookAt(this.getLookTarget(new THREE.Vector3()));

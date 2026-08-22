@@ -111,4 +111,32 @@ describe('PlayerController third-person mode', () => {
     expect(() => player.setThirdPerson({ target: null })).toThrow(TypeError);
     player.dispose();
   });
+
+  it('pulls the camera closer when an obstacle blocks the third-person view', () => {
+    const { camera, player } = setup();
+    const avatar = new THREE.Group();
+    // orbitYaw=0 时相机在角色 +z 后方；在两者之间放一面墙
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 0.5), new THREE.MeshBasicMaterial());
+    wall.position.set(0, 2, 3);
+    wall.updateMatrixWorld(true);
+    player.setThirdPerson({ target: avatar, cameraObstacles: [wall] });
+    for (let i = 0; i < 20; i += 1) player.update(0.1); // 阻尼收敛
+    expect(camera.position.z).toBeLessThan(4); // 无障碍时应约为 5.7
+    player.dispose();
+  });
+
+  it('pushes the avatar out of circular obstacles and clears them on setFirstPerson', () => {
+    const { canvas, player } = setup();
+    const avatar = new THREE.Group();
+    player.setThirdPerson({ target: avatar });
+    player.setObstacles([{ x: 0, z: -2, r: 1 }]);
+    document.pointerLockElement = canvas;
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    for (let i = 0; i < 30; i += 1) player.update(0.1); // 全速冲向障碍
+    const dist = Math.hypot(avatar.position.x, avatar.position.z + 2);
+    expect(dist).toBeCloseTo(1.45, 1); // 被推到 障碍半径+角色半径 处
+    player.setFirstPerson();
+    expect(player.obstacles).toEqual([]);
+    player.dispose();
+  });
 });
