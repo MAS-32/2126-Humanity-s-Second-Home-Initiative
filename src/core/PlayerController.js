@@ -1,6 +1,20 @@
 import * as THREE from 'three';
 
 const MOVEMENT_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD']);
+// 鼠标事件尖峰阈值：焦点恢复 / 系统级跳变时 movement 会出现巨大值，直接丢弃该帧
+const MOUSE_SPIKE_THRESHOLD = 150;
+
+const DEFAULT_TP_OPTIONS = {
+  distance: 6, // 相机到角色的基础距离
+  height: 2.2, // 相机基础高度偏移
+  lookHeight: 1.2, // 注视点相对角色原点的高度
+  rotateSensitivity: 0.0022,
+  cameraDamping: 9, // 越大跟随越紧；基于 1 - exp(-damping * dt) 的帧率无关阻尼
+  minPitch: -0.35, // 最低俯角（略微平视下方）
+  maxPitch: 1.15, // 最高仰角（避免翻到地底/天顶）
+  defaultPitch: 0.34,
+  moveSpeed: null, // 缺省沿用 speed
+};
 
 export class PlayerController {
   constructor({
@@ -24,6 +38,12 @@ export class PlayerController {
     this.keys = new Set();
     this.camera.rotation.order = 'YXZ';
 
+    // ---- 第三人称模式状态（默认关闭，保持第一人称行为不变）----
+    this.mode = 'first-person';
+    this.tp = null;
+    this.orbitYaw = 0;
+    this.orbitPitch = DEFAULT_TP_OPTIONS.defaultPitch;
+
     this.onCanvasClick = () => {
       if (this.enabled && this.document.pointerLockElement !== this.domElement) {
         this.domElement.requestPointerLock?.();
@@ -34,6 +54,17 @@ export class PlayerController {
     };
     this.onMouseMove = (event) => {
       if (!this.enabled || this.document.pointerLockElement !== this.domElement) return;
+      // 过滤输入焦点恢复时的鼠标跳变，避免视角突然甩动
+      if (Math.abs(event.movementX) > MOUSE_SPIKE_THRESHOLD || Math.abs(event.movementY) > MOUSE_SPIKE_THRESHOLD) return;
+      if (this.mode === 'third-person' && this.tp) {
+        this.orbitYaw -= event.movementX * this.tp.rotateSensitivity;
+        this.orbitPitch = THREE.MathUtils.clamp(
+          this.orbitPitch + event.movementY * this.tp.rotateSensitivity,
+          this.tp.minPitch,
+          this.tp.maxPitch,
+        );
+        return;
+      }
       this.camera.rotation.y -= event.movementX * this.lookSensitivity;
       this.camera.rotation.x -= event.movementY * this.lookSensitivity;
       this.camera.rotation.x = THREE.MathUtils.clamp(this.camera.rotation.x, -Math.PI / 2, Math.PI / 2);
@@ -54,9 +85,63 @@ export class PlayerController {
     this.window.addEventListener('blur', this.clearKeys);
   }
 
+  /**
+   * 切换到第三人称：相机从后上方跟随 target（场景提供的可见角色）。
+   * Core 不认识任何具体角色，target 由场景注入，保持通用。
+   */
+  setThirdPerson({ target, ...options }) {
+    if (!target?.isObject3D) throw new TypeError('setThirdPerson requires a target Object3D.');
+    this.tp = { ...DEFAULT_TP_OPTIONS, ...options, target };
+    this.mode = 'third-person';
+    this.orbitYaw = this.camera.rotation.y;
+    this.orbitPitch = this.tp.defaultPitch;
+    // 立即把相机摆到跟随位置，避免切换瞬间视角跳变
+    this.snapCameraToTarget();
+  }
+
+  /** 恢复第一人称（场景退出时必须调用，避免影响其他场景）。 */
+  setFirstPerson() {
+    this.mode = 'first-person';
+    this.tp = null;
+    this.keys.clear();
+    this.camera.rotation.order = 'YXZ';
+  }
+
+  snapCameraToTarget() {
+    if (!this.tp) return;
+    const desired = this.getDesiredCameraPosition(new THREE.Vector3());
+    this.camera.position.copy(desired);
+    this.camera.lookAt(this.getLookTarget(new THREE.Vector3()));
+    this.camera.updateMatrixWorld(true);
+  }
+
+  getDesiredCameraPosition(out) {
+    const { target, distance, height } = this.tp;
+    const cosPitch = Math.cos(this.orbitPitch);
+    out.set(
+      target.position.x + Math.sin(this.orbitYaw) * cosPitch * distance,
+      target.position.y + height + Math.sin(this.orbitPitch) * distance,
+      target.position.z + Math.cos(this.orbitYaw) * cosPitch * distance,
+    );
+    return out;
+  }
+
+  getLookTarget(out) {
+    out.copy(this.tp.target.position);
+    out.y += this.tp.lookHeight;
+    return out;
+  }
+
   update(dt) {
-    if (!this.enabled || this.disposed || this.document.pointerLockElement !== this.domElement) return;
+    if (!this.enabled || this.disposed) return;
     const delta = Math.min(Math.max(dt, 0), 0.1);
+
+    if (this.mode === 'third-person' && this.tp) {
+      this.updateThirdPerson(delta);
+      return;
+    }
+
+    if (this.document.pointerLockElement !== this.domElement) return;
     let forward = Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS'));
     let right = Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA'));
     const length = Math.hypot(forward, right);
@@ -69,14 +154,51 @@ export class PlayerController {
     this.camera.position.z += (-right * Math.sin(yaw) - forward * Math.cos(yaw)) * this.speed * delta;
   }
 
+  updateThirdPerson(delta) {
+    const tp = this.tp;
+    const locked = this.document.pointerLockElement === this.domElement;
+
+    // 角色移动（仅 pointer lock 时接受按键，与第一人称一致）
+    if (locked) {
+      let forward = Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS'));
+      let right = Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA'));
+      const length = Math.hypot(forward, right);
+      if (length > 0) {
+        forward /= length;
+        right /= length;
+        const yaw = this.orbitYaw;
+        const moveX = (right * Math.cos(yaw) - forward * Math.sin(yaw));
+        const moveZ = (-right * Math.sin(yaw) - forward * Math.cos(yaw));
+        const moveSpeed = tp.moveSpeed ?? this.speed;
+        tp.target.position.x += moveX * moveSpeed * delta;
+        tp.target.position.z += moveZ * moveSpeed * delta;
+        // 角色朝向移动方向
+        tp.target.rotation.y = Math.atan2(moveX, moveZ);
+      }
+    }
+
+    // 相机阻尼跟随：帧率无关的指数平滑，目标静止时收敛不抽搐
+    const desired = this.getDesiredCameraPosition(new THREE.Vector3());
+    const alpha = 1 - Math.exp(-tp.cameraDamping * delta);
+    this.camera.position.lerp(desired, alpha);
+    this.camera.lookAt(this.getLookTarget(new THREE.Vector3()));
+  }
+
   teleport(position) {
     if (!position) throw new Error('teleport(position) requires a position.');
     this.keys.clear();
+    if (this.mode === 'third-person' && this.tp) {
+      // position 语义是“出生观察点”：角色落点在地面（y=0），相机由跟随逻辑接管
+      this.tp.target.position.set(position.x, 0, position.z);
+      this.snapCameraToTarget();
+      return;
+    }
     this.camera.position.copy(position);
     this.camera.updateMatrixWorld(true);
   }
 
   getPosition() {
+    if (this.mode === 'third-person' && this.tp) return this.tp.target.position.clone();
     return this.camera.position.clone();
   }
 

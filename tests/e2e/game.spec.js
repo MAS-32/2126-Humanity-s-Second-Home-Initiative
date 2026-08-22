@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 test('real browser runs interactions and repeated Earth → Moon → Mars flow cleanly', async ({ page }) => {
+  // 太空电梯上升演出约 9.4 秒/次，两轮循环需要更长的测试超时
+  test.setTimeout(120_000);
   const errors = [];
   page.on('console', (message) => {
     const knownHeadlessGpuDiagnostic = /GL Driver Message.*GPU stall due to ReadPixels/.test(message.text());
@@ -36,8 +38,10 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
   async function runCycle() {
     await interactWith('earth-interaction');
     await expect.poll(() => page.evaluate(() => window.__GAME__.state.get('visitedSolarSystem'))).toBe(true);
-    await interactWith('moon-portal');
-    await expect(page.locator('#scene-label')).toHaveText('MOON TEST SCENE');
+    // 展厅解说 AI 是模态分支对话：Esc 关闭后再继续
+    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' })));
+    await interactWith('moon-portal'); // 触发太空电梯上升演出（约 9.4s）
+    await expect(page.locator('#scene-label')).toHaveText('MOON TEST SCENE', { timeout: 30_000 });
     await interactWith('moon-interaction');
     await expect.poll(() => page.evaluate(() => window.__GAME__.state.get('talkedMoonScientist'))).toBe(true);
     await interactWith('mars-portal');
@@ -51,8 +55,8 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
   await runCycle();
 
   expect(await page.locator('canvas').count()).toBe(1);
-  // Earth 现有 3 个交互项：陪伴机器人、展厅控制台（earth-interaction）、太空电梯（moon-portal）
-  expect(await page.evaluate(() => window.__GAME__.interaction.entries.size)).toBe(3);
+  // Earth 现有 6 个交互项：小满、展厅解说、M-07、A-12、登舱引导员、太空电梯
+  expect(await page.evaluate(() => window.__GAME__.interaction.entries.size)).toBe(6);
   expect(errors).toEqual([]);
 });
 

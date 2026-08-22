@@ -1,40 +1,50 @@
-// EarthScene 专属 UI 组件：模态对话（机器人）与非模态信息面板（展厅导览）。
-// 两者都只操作自己创建的 DOM / 定时器 / 监听器，destroy() 保证完全清理。
+// EarthScene 专属 UI 组件：线性模态对话（小满）、分支模态对话（NPC）、转场淡出。
+// 所有组件只操作自己创建的 DOM / 定时器 / 监听器，destroy() 保证完全清理。
+// 模态对话打开时暂停玩家与场景交互，关闭后恢复；E 键在对话期间由对话自身接管。
 
 const TYPING_INTERVAL_MS = 22;
 
+function createTypingEngine() {
+  let timer = null;
+  let fullText = '';
+  return {
+    type(el, text) {
+      this.stop();
+      fullText = text;
+      let shown = 0;
+      el.textContent = '';
+      timer = setInterval(() => {
+        shown += 1;
+        el.textContent = fullText.slice(0, shown);
+        if (shown >= fullText.length) this.stop();
+      }, TYPING_INTERVAL_MS);
+    },
+    complete(el) {
+      if (timer === null) return false;
+      this.stop();
+      el.textContent = fullText;
+      return true;
+    },
+    stop() {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    },
+    get typing() { return timer !== null; },
+  };
+}
+
 /**
- * 模态对话：打开时暂停玩家与场景交互，关闭后恢复。
- * 使用预设台词，不依赖任何在线 API。
+ * 线性模态对话：打开时暂停玩家与场景交互，关闭后恢复。
  */
 export function createDialogue({ ctx, speaker, lines, onOpen, onClose }) {
   let root = null;
   let textEl = null;
-  let hintEl = null;
   let open = false;
   let lineIndex = 0;
-  let typingTimer = null;
-  let fullText = '';
   let destroyed = false;
-
-  const stopTyping = () => {
-    if (typingTimer !== null) {
-      clearInterval(typingTimer);
-      typingTimer = null;
-    }
-  };
-
-  const typeLine = (text) => {
-    stopTyping();
-    fullText = text;
-    let shown = 0;
-    textEl.textContent = '';
-    typingTimer = setInterval(() => {
-      shown += 1;
-      textEl.textContent = fullText.slice(0, shown);
-      if (shown >= fullText.length) stopTyping();
-    }, TYPING_INTERVAL_MS);
-  };
+  const typing = createTypingEngine();
 
   const onKeyDown = (event) => {
     if (!open) return;
@@ -46,7 +56,6 @@ export function createDialogue({ ctx, speaker, lines, onOpen, onClose }) {
       api.close();
     }
   };
-
   const onClick = () => api.advance();
 
   const api = {
@@ -57,7 +66,6 @@ export function createDialogue({ ctx, speaker, lines, onOpen, onClose }) {
       open = true;
       lineIndex = 0;
 
-      // 暂停玩家移动与场景交互（E 键改由对话自身接管）。
       ctx.player.setEnabled?.(false);
       ctx.interaction.setEnabled?.(false);
       document.exitPointerLock?.();
@@ -69,7 +77,7 @@ export function createDialogue({ ctx, speaker, lines, onOpen, onClose }) {
       speakerEl.textContent = speaker;
       textEl = document.createElement('div');
       textEl.className = 'earth-dialog-text';
-      hintEl = document.createElement('div');
+      const hintEl = document.createElement('div');
       hintEl.className = 'earth-dialog-hint';
       hintEl.textContent = 'E / 点击 继续 · Esc 结束对话';
       root.append(speakerEl, textEl, hintEl);
@@ -77,39 +85,29 @@ export function createDialogue({ ctx, speaker, lines, onOpen, onClose }) {
       document.body.append(root);
       document.addEventListener('keydown', onKeyDown);
 
-      typeLine(lines[0]);
+      typing.type(textEl, lines[0]);
       onOpen?.();
     },
 
     advance() {
       if (!open) return;
-      if (typingTimer !== null) {
-        // 打字中：先补全当前行。
-        stopTyping();
-        textEl.textContent = fullText;
-        return;
-      }
+      if (typing.complete(textEl)) return;
       lineIndex += 1;
-      if (lineIndex >= lines.length) {
-        api.close();
-      } else {
-        typeLine(lines[lineIndex]);
-      }
+      if (lineIndex >= lines.length) api.close();
+      else typing.type(textEl, lines[lineIndex]);
     },
 
     close() {
       if (!open) return;
       open = false;
-      stopTyping();
+      typing.stop();
       document.removeEventListener('keydown', onKeyDown);
       if (root) {
         root.removeEventListener('click', onClick);
         root.remove();
         root = null;
         textEl = null;
-        hintEl = null;
       }
-      // 恢复输入；若场景正在切换，SceneManager 会在其生命周期内再兜底。
       if (!destroyed) {
         ctx.player.setEnabled?.(true);
         ctx.interaction.setEnabled?.(true);
@@ -119,19 +117,17 @@ export function createDialogue({ ctx, speaker, lines, onOpen, onClose }) {
 
     destroy() {
       if (destroyed) return;
-      // 场景销毁时无条件恢复输入，避免把禁用状态泄漏到下一个场景。
       const wasOpen = open;
       destroyed = true;
       if (wasOpen) {
         open = false;
-        stopTyping();
+        typing.stop();
         document.removeEventListener('keydown', onKeyDown);
         if (root) {
           root.removeEventListener('click', onClick);
           root.remove();
           root = null;
           textEl = null;
-          hintEl = null;
         }
       }
       ctx.player.setEnabled?.(true);
@@ -143,49 +139,173 @@ export function createDialogue({ ctx, speaker, lines, onOpen, onClose }) {
 }
 
 /**
- * 非模态信息面板：展厅全息导览。不暂停输入，重复交互翻页。
+ * 分支模态对话：主题菜单 + 每个主题 2-4 轮台词。
+ * branches: [{ id, title, lines: [...], action?: string }]
+ * onAction(action)：台词播完后触发（如 'startAscent' 启动太空电梯演出）。
+ * 操作：菜单按 1/2/3 或点击选择分支；E/点击 推进台词；Esc 返回菜单 / 关闭。
  */
-export function createInfoPanel({ title, pages, hint = '对准控制台再按 E 翻页' }) {
+export function createBranchDialogue({ ctx, speaker, greeting, branches, onAction, onClose }) {
   let root = null;
   let textEl = null;
-  let pageIndex = -1;
+  let menuEl = null;
+  let hintEl = null;
+  let open = false;
   let destroyed = false;
+  let activeBranch = -1; // -1 = 菜单
+  let lineIndex = 0;
+  const readBranches = new Set();
+  const typing = createTypingEngine();
+
+  const showMenu = () => {
+    activeBranch = -1;
+    menuEl.innerHTML = '';
+    branches.forEach((branch, index) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'earth-dialog-branch';
+      item.textContent = `${index + 1}. ${branch.title}${readBranches.has(index) ? ' ✓' : ''}`;
+      item.addEventListener('click', (event) => {
+        event.stopPropagation();
+        selectBranch(index);
+      });
+      menuEl.append(item);
+    });
+    hintEl.textContent = '按 1/2/3 或点击选择话题 · Esc 离开';
+    typing.type(textEl, greeting);
+  };
+
+  const showLine = () => {
+    const branch = branches[activeBranch];
+    menuEl.innerHTML = '';
+    hintEl.textContent = 'E / 点击 继续 · Esc 返回话题';
+    typing.type(textEl, branch.lines[lineIndex]);
+  };
+
+  const selectBranch = (index) => {
+    if (index < 0 || index >= branches.length) return;
+    activeBranch = index;
+    lineIndex = 0;
+    showLine();
+  };
+
+  const finishBranch = () => {
+    const branch = branches[activeBranch];
+    readBranches.add(activeBranch);
+    if (branch.action) {
+      api.close();
+      onAction?.(branch.action);
+      return;
+    }
+    showMenu();
+  };
+
+  const onKeyDown = (event) => {
+    if (!open) return;
+    if (event.code === 'Escape') {
+      event.preventDefault();
+      if (activeBranch >= 0) {
+        typing.stop();
+        showMenu();
+      } else {
+        api.close();
+      }
+      return;
+    }
+    if (activeBranch === -1 && event.code.startsWith('Digit')) {
+      const index = Number(event.code.slice(5)) - 1;
+      if (index >= 0 && index < branches.length) {
+        event.preventDefault();
+        selectBranch(index);
+      }
+      return;
+    }
+    if (event.code === 'KeyE' || event.code === 'Enter' || event.code === 'Space') {
+      event.preventDefault();
+      api.advance();
+    }
+  };
+  const onClick = () => api.advance();
 
   const api = {
-    isVisible: () => root !== null,
+    isOpen: () => open,
 
-    next() {
-      if (destroyed) return;
-      pageIndex = (pageIndex + 1) % pages.length;
-      if (!root) {
-        root = document.createElement('div');
-        root.className = 'earth-info-panel';
-        const titleEl = document.createElement('div');
-        titleEl.className = 'earth-info-title';
-        titleEl.textContent = title;
-        textEl = document.createElement('div');
-        textEl.className = 'earth-info-text';
-        const hintEl = document.createElement('div');
-        hintEl.className = 'earth-info-hint';
-        hintEl.textContent = hint;
-        root.append(titleEl, textEl, hintEl);
-        document.body.append(root);
-      }
-      textEl.textContent = pages[pageIndex];
+    open() {
+      if (open || destroyed) return;
+      open = true;
+      readBranches.clear();
+
+      ctx.player.setEnabled?.(false);
+      ctx.interaction.setEnabled?.(false);
+      document.exitPointerLock?.();
+
+      root = document.createElement('div');
+      root.className = 'earth-dialog';
+      const speakerEl = document.createElement('div');
+      speakerEl.className = 'earth-dialog-speaker';
+      speakerEl.textContent = speaker;
+      textEl = document.createElement('div');
+      textEl.className = 'earth-dialog-text';
+      menuEl = document.createElement('div');
+      menuEl.className = 'earth-dialog-menu';
+      hintEl = document.createElement('div');
+      hintEl.className = 'earth-dialog-hint';
+      root.append(speakerEl, textEl, menuEl, hintEl);
+      root.addEventListener('click', onClick);
+      document.body.append(root);
+      document.addEventListener('keydown', onKeyDown);
+
+      showMenu();
     },
 
-    hide() {
+    advance() {
+      if (!open || activeBranch === -1) return;
+      if (typing.complete(textEl)) return;
+      lineIndex += 1;
+      if (lineIndex >= branches[activeBranch].lines.length) finishBranch();
+      else showLine();
+    },
+
+    selectBranch,
+
+    close() {
+      if (!open) return;
+      open = false;
+      typing.stop();
+      document.removeEventListener('keydown', onKeyDown);
       if (root) {
+        root.removeEventListener('click', onClick);
         root.remove();
         root = null;
         textEl = null;
+        menuEl = null;
+        hintEl = null;
       }
-      pageIndex = -1;
+      if (!destroyed) {
+        ctx.player.setEnabled?.(true);
+        ctx.interaction.setEnabled?.(true);
+      }
+      onClose?.();
     },
 
     destroy() {
+      if (destroyed) return;
+      const wasOpen = open;
       destroyed = true;
-      api.hide();
+      if (wasOpen) {
+        open = false;
+        typing.stop();
+        document.removeEventListener('keydown', onKeyDown);
+        if (root) {
+          root.removeEventListener('click', onClick);
+          root.remove();
+          root = null;
+          textEl = null;
+          menuEl = null;
+          hintEl = null;
+        }
+      }
+      ctx.player.setEnabled?.(true);
+      ctx.interaction.setEnabled?.(true);
     },
   };
 
