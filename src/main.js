@@ -4511,6 +4511,95 @@ addEventListener('resize', ()=>{
   composer.setSize(innerWidth, innerHeight);
 });
 
+/* ================= 总工程整合桥（postMessage mars:* 协议 + 稳定全局 API） =================
+   总工程（统一入口 / 地球 / 月球）可用 iframe 嵌入本页面，通过 postMessage 驱动：
+     { type:'mars:enterCity', city:'capital' }
+     { type:'mars:tour', on:true }        { type:'mars:xray', on:true }
+     { type:'mars:explore', on:true }     { type:'mars:land', city:'verde' }
+     { type:'mars:exitCity' }             { type:'mars:goto', page:'earth'|'moon'|'hub' }
+   也可在同页读取 window.MarsModule 直接调用。
+   协议名对齐总工程 moon:* 规范（见 docs/INTEGRATION.md）。 */
+const __marsEnv = window.MARS_INTEGRATION_ENV || {};
+window.MarsModule = {
+  id: 'mars-civilization-2126', version: '1.0.0', ready: true,
+  enterCity(key){
+    const g = cityGroups[key];
+    if(!g) return;
+    if(mode==='surface') exitSurface();
+    stopTour();
+    enterCity(g, key);
+  },
+  exitCity(){
+    if(mode==='explore'){ exitExplore(); return; }
+    if(mode==='surface'){ exitSurface(); return; }
+    exitCity();
+  },
+  tour(on){
+    if(on){
+      if(mode==='surface') exitSurface();
+      if(!tourOn){ tourOn=true; btnTour.classList.add('on'); tourIdx=-1; nextStop(); }
+    } else {
+      stopTour();
+      if(mode==='city') exitCity();
+    }
+  },
+  xray(on){
+    if(!!xrayTarget !== !!on) btnIce.click();
+  },
+  explore(on){
+    if(on){
+      if(mode==='surface') exitSurface();
+      if(mode!=='explore'){
+        const g = (mode==='city' && currentCity) ? currentCity : (()=>{
+          const cd = camera.position.clone().normalize();
+          let best=null, bd=1e9;
+          for(const k in cityGroups){
+            const d = cityGroups[k].position.clone().normalize().angleTo(cd);
+            if(d<bd){ bd=d; best=cityGroups[k]; }
+          }
+          return best;
+        })();
+        landAt(g);
+      }
+    } else {
+      if(mode==='surface') exitSurface();
+      exitExplore();
+    }
+  },
+  land(key){
+    const g = cityGroups[key];
+    if(!g) return;
+    if(mode==='surface') exitSurface();
+    stopTour();
+    landAt(g);
+  },
+  setViewMode(m){ explore.third = (m==='third'); },
+  goto(page){
+    const url = page==='earth' ? (__marsEnv.earthUrl||'') : page==='moon' ? (__marsEnv.moonUrl||'') : (__marsEnv.hubUrl||'');
+    if(url) window.open(url, '_blank', 'noopener');
+    else showToast(page==='earth' ? '地球章节未配置 earthUrl' : page==='moon' ? '月球章节未配置 moonUrl' : '返回太阳系枢纽');
+  },
+};
+window.addEventListener('message', (ev)=>{
+  const d = ev.data;
+  if(!d || typeof d.type!=='string' || !d.type.startsWith('mars:')) return;
+  const api = window.MarsModule, cmd = d.type.slice(5);
+  switch(cmd){
+    case 'goto': api.goto(d.page); break;
+    case 'enterCity': api.enterCity(d.city); break;
+    case 'exitCity': api.exitCity(); break;
+    case 'tour': api.tour(!!d.on); break;
+    case 'xray': api.xray(!!d.on); break;
+    case 'explore': api.explore(!!d.on); break;
+    case 'land': api.land(d.city); break;
+    case 'setViewMode': api.setViewMode(d.mode); break;
+    default: break;
+  }
+});
+if(window.parent && window.parent !== window){
+  window.parent.postMessage({ type:'mars:ready', id:'mars-civilization-2126', version:'1.0.0' }, '*');
+}
+
 } catch(err){
   const el = document.getElementById('err');
   el.style.display = 'flex';
