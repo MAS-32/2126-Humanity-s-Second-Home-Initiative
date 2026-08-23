@@ -11,6 +11,12 @@ describe('GameState', () => {
     state.reset();
     expect(state.get('visitedSolarSystem')).toBe(false);
     expect(state.get('currentScene')).toBe('earth');
+    expect(state.get('moon')).toEqual({
+      visits: 0,
+      observatoryVisited: false,
+      marsRouteAuthorized: false,
+    });
+    expect(state.get('mars')).toEqual({ visits: 0, archiveViewed: false });
   });
 
   it('notifies subscribers and supports unsubscribe', () => {

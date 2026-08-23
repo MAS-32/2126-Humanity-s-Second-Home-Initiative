@@ -1,5 +1,15 @@
 const DEFAULT_STATE = Object.freeze({
   currentScene: 'earth',
+  earth: Object.freeze({}),
+  moon: Object.freeze({
+    visits: 0,
+    observatoryVisited: false,
+    marsRouteAuthorized: false,
+  }),
+  mars: Object.freeze({
+    visits: 0,
+    archiveViewed: false,
+  }),
   visitedSolarSystem: false,
   talkedEarthAI: false,
   arrivedMoon: false,

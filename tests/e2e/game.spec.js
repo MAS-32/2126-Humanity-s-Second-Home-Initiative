@@ -32,6 +32,9 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
       if (avatar) {
         avatar.position.set(worldPosition.x + 1.5, 0, worldPosition.z + 1.5);
         avatar.updateMatrixWorld(true);
+      } else {
+        worldPosition.y += 1.4;
+        game.camera.position.set(worldPosition.x, worldPosition.y, worldPosition.z + 4);
       }
       game.camera.lookAt(worldPosition);
       game.camera.updateMatrixWorld(true);
@@ -47,7 +50,7 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
   await page.evaluate(() => {
     window.__THREE_VECTOR3__ = window.__GAME__.camera.position.constructor;
   });
-  async function runCycle() {
+  async function runCycle(returnViaMoon = false) {
     await interactWith('earth-interaction');
     await expect.poll(() => page.evaluate(() => window.__GAME__.state.get('visitedSolarSystem'))).toBe(true);
     // 展厅解说 AI 是模态分支对话：Esc 关闭后再继续
@@ -57,14 +60,20 @@ test('real browser runs interactions and repeated Earth → Moon → Mars flow c
     await interactWith('moon-interaction');
     await expect.poll(() => page.evaluate(() => window.__GAME__.state.get('talkedMoonScientist'))).toBe(true);
     await interactWith('mars-portal');
-    await expect(page.locator('#scene-label')).toHaveText('火星 · 第二家园');
+    await expect(page.locator('#scene-label')).toHaveText('火星 · 曙光城');
     await expect.poll(() => page.evaluate(() => window.__GAME__.state.get('arrivedMars'))).toBe(true);
-    await interactWith('earth-portal');
+    if (returnViaMoon) {
+      await interactWith('mars-moon-portal');
+      await expect(page.locator('#scene-label')).toHaveText('月球 · 静海前哨');
+      await interactWith('moon-earth-portal');
+    } else {
+      await interactWith('earth-portal');
+    }
     await expect(page.locator('#scene-label')).toHaveText('2126 · 地球');
   }
 
   await runCycle();
-  await runCycle();
+  await runCycle(true);
 
   expect(await page.locator('canvas').count()).toBe(1);
   // Earth 交互项 = 6 个原有（小满/展厅/M-07/A-12/引导员/电梯）+ GLB 模型的 20 个

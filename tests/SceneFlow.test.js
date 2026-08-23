@@ -44,6 +44,9 @@ describe('actual scene integration flow', () => {
       if (avatar) {
         avatar.position.set(targetPos.x + 1.5, 0, targetPos.z + 1.5);
         avatar.updateMatrixWorld(true);
+      } else {
+        targetPos.y += 1.4;
+        camera.position.set(targetPos.x, targetPos.y, targetPos.z + 4);
       }
       camera.lookAt(targetPos);
       camera.updateMatrixWorld(true);
@@ -67,18 +70,30 @@ describe('actual scene integration flow', () => {
     }
     expect(state.get('currentScene')).toBe('moon');
     expect(state.get('arrivedMoon')).toBe(true);
-    expect(interaction.entries.size).toBe(2);
+    expect(interaction.entries.size).toBe(4);
     await interact('moon-interaction');
     expect(state.get('talkedMoonScientist')).toBe(true);
+    expect(state.get('moon').observatoryVisited).toBe(true);
     await interact('mars-portal');
     expect(state.get('currentScene')).toBe('mars');
     expect(state.get('arrivedMars')).toBe(true);
-    expect(interaction.entries.size).toBe(1);
+    expect(interaction.entries.size).toBe(3);
+    await interact('mars-moon-portal');
+    expect(state.get('currentScene')).toBe('moon');
+    await interact('moon-earth-portal');
+    expect(state.get('currentScene')).toBe('earth');
+
+    // The moon rocket is a second route to Mars and reuses the same SceneManager.
+    await manager.go('moon');
+    await interact('moon-rocket');
+    expect(state.get('currentScene')).toBe('mars');
     await interact('earth-portal');
     expect(state.get('currentScene')).toBe('earth');
     // Earth 现有 6 个交互项：小满、展厅解说、M-07、A-12、登舱引导员、太空电梯
     expect(interaction.entries.size).toBe(6);
     expect(camera.position.toArray()).toEqual([0, 1.7, 5]);
+    expect(state.get('moon').visits).toBe(3);
+    expect(state.get('mars').visits).toBe(2);
 
     await manager.dispose();
     interaction.dispose();

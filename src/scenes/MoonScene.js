@@ -1,125 +1,200 @@
 import * as THREE from 'three';
-import { createBaseScene, disposeScene } from './sceneHelpers.js';
+import {
+  createSceneRuntimeAdapter,
+  createTravelGate,
+  disposeScene,
+  patchWorldState,
+} from './sceneHelpers.js';
 
-// 第二章「月球 · 静海前哨」（最小正式化版本）。
-// 契约保持：交互对象名 'moon-interaction' / 'mars-portal'，状态位
-// talkedMoonScientist / arrivedMoon，enter() 设置 arrivedMoon —— E2E 与主线依赖这些名字。
-// 视觉只做到“不像测试场”：月面 + 星空 + 悬挂的地球 + 穹顶居住舱 + 火星航线信标门。
-// 章节正式内容（基地内部/任务链）属于 MoonScene 自己的迭代，不在 Earth 收口范围内扩张。
+// Moon Adapter: the standalone moon-outpost project supplied the world/content
+// language, but its renderer, camera, pointer-lock input, RAF loop and iframe
+// bridge are intentionally not migrated. This module only consumes Shared Core.
+
+const PALETTE = {
+  white: 0xdde5eb,
+  metal: 0x65707a,
+  glass: 0x73d9f2,
+  cyan: 0x7fe9ff,
+  amber: 0xffa66b,
+};
+
+function material(color, options = {}) {
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.24, ...options });
+}
+
+function addStars(scene) {
+  const positions = new Float32Array(900 * 3);
+  for (let i = 0; i < 900; i += 1) {
+    const v = new THREE.Vector3().randomDirection().multiplyScalar(150 + (i % 7) * 18);
+    v.y = Math.abs(v.y) + 22;
+    positions.set([v.x, v.y, v.z], i * 3);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  scene.add(new THREE.Points(geometry, new THREE.PointsMaterial({
+    color: 0xd7e8ff,
+    size: 1.25,
+    sizeAttenuation: false,
+  })));
+}
+
+function addDome(scene, { name, position, radius, color = PALETTE.glass }) {
+  const group = new THREE.Group();
+  group.name = name;
+  group.position.copy(position);
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius * 1.05, radius * 1.1, 0.65, 32),
+    material(PALETTE.metal, { metalness: 0.55 }),
+  );
+  base.position.y = 0.32;
+  group.add(base);
+  const shell = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 32, 18, 0, Math.PI * 2, 0, Math.PI / 2),
+    material(color, { transparent: true, opacity: 0.34, roughness: 0.16 }),
+  );
+  shell.position.y = 0.62;
+  group.add(shell);
+  const ribs = new THREE.LineSegments(
+    new THREE.WireframeGeometry(new THREE.SphereGeometry(radius * 1.01, 16, 9, 0, Math.PI * 2, 0, Math.PI / 2)),
+    new THREE.LineBasicMaterial({ color: 0xcfe7ef, transparent: true, opacity: 0.42 }),
+  );
+  ribs.position.y = 0.62;
+  group.add(ribs);
+  scene.add(group);
+  return group;
+}
+
+function addCentralHub(scene) {
+  const group = new THREE.Group();
+  group.name = 'moon-central-hub';
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 7.2, 1.4, 32), material(PALETTE.white));
+  base.position.y = 0.7;
+  group.add(base);
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 3.5, 8, 24), material(PALETTE.white));
+  tower.position.y = 4.7;
+  group.add(tower);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(3.8, 0.16, 10, 48),
+    new THREE.MeshBasicMaterial({ color: PALETTE.cyan }),
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 5.4;
+  group.add(ring);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.25, 7, 10), material(PALETTE.metal));
+  mast.position.y = 11;
+  group.add(mast);
+  scene.add(group);
+  return { group, ring };
+}
+
+function addRocket(scene) {
+  const group = new THREE.Group();
+  group.name = 'moon-rocket';
+  group.position.set(0, 0, -18);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.15, 7.5, 18), material(0xe8edf0));
+  body.position.y = 4.5;
+  group.add(body);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.2, 18), material(PALETTE.amber));
+  nose.position.y = 9.35;
+  group.add(nose);
+  for (const side of [-1, 1]) {
+    const booster = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.5, 5.2, 14), material(PALETTE.metal));
+    booster.position.set(side * 1.15, 3.2, 0);
+    group.add(booster);
+  }
+  scene.add(group);
+  return group;
+}
 
 export function createMoonScene(ctx) {
-  const scene = createBaseScene({ background: 0x060a18, ground: 0x8f959e, name: 'moon' });
-  const spawn = new THREE.Vector3(0, 1.7, 5);
+  ctx.player.setFirstPerson?.();
+  ctx.interaction.setProximitySource?.(null);
 
-  // ---- 星空（远距点云，关闭尺寸衰减保持可读）----
-  const starPositions = new Float32Array(600 * 3);
-  for (let i = 0; i < 600; i += 1) {
-    const v = new THREE.Vector3().randomDirection();
-    v.y = Math.abs(v.y) * 0.9 + 0.05; // 只铺天穹
-    v.multiplyScalar(180);
-    starPositions.set([v.x, v.y, v.z], i * 3);
-  }
-  const starGeometry = new THREE.BufferGeometry();
-  starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-  scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({
-    color: 0xcfe0ff,
-    size: 1.3,
-    sizeAttenuation: false,
-    transparent: true,
-    opacity: 0.9,
-  })));
+  const scene = new THREE.Scene();
+  scene.name = 'moon';
+  scene.background = new THREE.Color(0x040712);
+  scene.fog = new THREE.FogExp2(0x090d18, 0.006);
+  const spawn = new THREE.Vector3(0, 1.7, 12);
+  const runtime = createSceneRuntimeAdapter(ctx, {
+    bodyClass: 'scene-moon',
+    camera: { fov: 64, near: 0.1, far: 700, yaw: 0, pitch: -0.04 },
+    renderer: { toneMappingExposure: 1.12, shadows: true },
+  });
 
-  // ---- 悬挂在月面天空的地球（第一章的来处，情绪锚点）----
+  scene.add(new THREE.HemisphereLight(0x9dbbdd, 0x30333a, 1.05));
+  const sun = new THREE.DirectionalLight(0xfff1da, 2.1);
+  sun.position.set(-55, 95, 40);
+  scene.add(sun);
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(180, 180, 24, 24),
+    material(0x858b94, { roughness: 1, metalness: 0 }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+  addStars(scene);
+
   const earth = new THREE.Mesh(
-    new THREE.SphereGeometry(7, 32, 24),
-    new THREE.MeshBasicMaterial({ color: 0x3f8fd8 }),
+    new THREE.SphereGeometry(7.5, 40, 28),
+    new THREE.MeshStandardMaterial({ color: 0x2f83cb, emissive: 0x12395f, emissiveIntensity: 0.45 }),
   );
-  earth.position.set(-28, 42, -70);
+  earth.position.set(-26, 32, -72);
   scene.add(earth);
-  const earthGlow = new THREE.Mesh(
-    new THREE.SphereGeometry(7.6, 32, 24),
-    new THREE.MeshBasicMaterial({ color: 0x7fc8f5, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false }),
-  );
-  earthGlow.position.copy(earth.position);
-  scene.add(earthGlow);
 
-  // ---- 月面岩石点缀（低调、有错落）----
-  const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x7a8089, roughness: 1 });
-  [[-6, -4, 0.8], [5, -7, 0.55], [9, 3, 1.1], [-9, 6, 0.7], [2, -12, 0.9]].forEach(([x, z, s]) => {
-    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), rockMaterial);
-    rock.position.set(x, s * 0.4, z);
-    rock.rotation.set(x, z, x * z);
-    scene.add(rock);
+  const hub = addCentralHub(scene);
+  addDome(scene, { name: 'moon-eco-dome', position: new THREE.Vector3(19, 0, -8), radius: 5, color: 0x78efb0 });
+  addDome(scene, { name: 'moon-research-village', position: new THREE.Vector3(-19, 0, -8), radius: 4.4 });
+  const rocket = addRocket(scene);
+
+  const observatory = addDome(scene, {
+    name: 'moon-interaction',
+    position: new THREE.Vector3(0, 0, 4),
+    radius: 2.2,
+    color: 0xa5c8ff,
   });
-
-  // ---- 前哨站穹顶居住舱（交互：研究员）----
-  const scientist = new THREE.Group();
-  scientist.name = 'moon-interaction';
-  scientist.position.set(0, 0, 0);
-  const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(1.6, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0xe8ecef, roughness: 0.35, metalness: 0.25 }),
-  );
-  scientist.add(dome);
-  const domeBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.7, 1.8, 0.35, 24),
-    new THREE.MeshStandardMaterial({ color: 0xb9c2c8, roughness: 0.6 }),
-  );
-  domeBase.position.y = 0.05;
-  scientist.add(domeBase);
-  const airlock = new THREE.Mesh(
-    new THREE.BoxGeometry(0.7, 0.9, 0.5),
-    new THREE.MeshStandardMaterial({ color: 0xd4dade, roughness: 0.5 }),
-  );
-  airlock.position.set(0, 0.45, 1.6);
-  scientist.add(airlock);
-  const domeLight = new THREE.Mesh(
-    new THREE.SphereGeometry(0.12, 8, 6),
-    new THREE.MeshBasicMaterial({ color: 0x6fe3f2 }),
-  );
-  domeLight.position.y = 1.75;
-  scientist.add(domeLight);
-  scene.add(scientist);
-
-  // ---- 火星航线信标门（交互：前往火星）----
-  const marsPortal = new THREE.Group();
-  marsPortal.name = 'mars-portal';
-  marsPortal.position.set(4, 0, 0);
-  const gateMaterial = new THREE.MeshStandardMaterial({ color: 0xc8b8ae, roughness: 0.45, metalness: 0.3 });
-  [-1, 1].forEach((side) => {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 2.4, 8), gateMaterial);
-    post.position.set(side * 0.9, 1.2, 0);
-    marsPortal.add(post);
+  const earthGate = createTravelGate({
+    name: 'moon-earth-portal',
+    color: 0x59bfff,
+    position: new THREE.Vector3(-6, 0, 3),
+    scale: 0.78,
   });
-  const gateBeam = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.16, 0.16), gateMaterial);
-  gateBeam.position.y = 2.4;
-  marsPortal.add(gateBeam);
-  const marsGlow = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.7, 2.4),
-    new THREE.MeshBasicMaterial({ color: 0xff8a5a, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
-  );
-  marsGlow.position.y = 1.05; // 下沿没过地面，保证准星射线在任何角度看向门体都能命中
-  marsPortal.add(marsGlow);
-  const marsBeacon = new THREE.Mesh(
-    new THREE.SphereGeometry(0.14, 10, 8),
-    new THREE.MeshBasicMaterial({ color: 0xff7a4d }),
-  );
-  marsBeacon.position.y = 2.65;
-  marsPortal.add(marsBeacon);
-  scene.add(marsPortal);
+  const marsGate = createTravelGate({
+    name: 'mars-portal',
+    color: 0xff8657,
+    position: new THREE.Vector3(6, 0, 3),
+    scale: 0.78,
+  });
+  scene.add(earthGate, marsGate);
 
-  ctx.interaction.add(scientist, {
-    text: '进入静海前哨居住舱',
-    distance: 7,
+  ctx.interaction.add(observatory, {
+    text: '进入太阳系观景台',
+    distance: 8,
     onInteract() {
       ctx.state.set('talkedMoonScientist', true);
-      ctx.ui.flash('静海前哨：欢迎回家之外的第一个家。');
+      patchWorldState(ctx.state, 'moon', { observatoryVisited: true });
+      ctx.ui.flash('观景台：月球是离开地球后的第一座长期家园。');
     },
   });
-  ctx.interaction.add(marsPortal, {
-    text: '前往火星 · 第二家园',
-    distance: 7,
-    onInteract() { ctx.sceneManager.go('mars'); },
+  ctx.interaction.add(earthGate, {
+    text: '返回地球',
+    distance: 8,
+    onInteract() { ctx.sceneManager.go('earth'); },
+  });
+  ctx.interaction.add(marsGate, {
+    text: '观景台航线 · 前往火星',
+    distance: 8,
+    onInteract() {
+      patchWorldState(ctx.state, 'moon', { marsRouteAuthorized: true });
+      ctx.sceneManager.go('mars');
+    },
+  });
+  ctx.interaction.add(rocket, {
+    text: '搭乘深空运输舰前往火星',
+    distance: 12,
+    onInteract() {
+      patchWorldState(ctx.state, 'moon', { marsRouteAuthorized: true });
+      ctx.sceneManager.go('mars');
+    },
   });
 
   let elapsed = 0;
@@ -127,17 +202,27 @@ export function createMoonScene(ctx) {
     scene,
     spawn,
     enter() {
+      runtime.enter();
+      const moonState = ctx.state.get('moon');
+      patchWorldState(ctx.state, 'moon', { visits: (moonState?.visits ?? 0) + 1 });
       ctx.state.set('arrivedMoon', true);
       ctx.ui.setScene('月球 · 静海前哨');
-      ctx.ui.flash('已抵达月球静海前哨——地球就在头顶。');
+      ctx.ui.flash('WASD 探索 · E 交互——观景台可返航地球或前往火星');
     },
     update(dt) {
       elapsed += dt;
-      domeLight.material.color.setHex(Math.sin(elapsed * 2.4) > -0.2 ? 0x6fe3f2 : 0x1a3a44);
-      marsBeacon.scale.setScalar(1 + Math.sin(elapsed * 3) * 0.18);
-      earth.rotation.y += dt * 0.05;
+      earth.rotation.y += dt * 0.035;
+      hub.ring.rotation.z += dt * 0.35;
+      for (const gate of [earthGate, marsGate]) {
+        const pulse = 1 + Math.sin(elapsed * 3 + gate.position.x) * 0.18;
+        gate.userData.beacon.scale.setScalar(pulse);
+      }
+      rocket.position.y = Math.sin(elapsed * 0.7) * 0.035;
     },
     exit() {},
-    dispose() { disposeScene(scene); },
+    dispose() {
+      runtime.dispose();
+      disposeScene(scene);
+    },
   };
 }

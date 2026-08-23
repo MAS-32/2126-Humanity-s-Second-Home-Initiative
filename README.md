@@ -1,6 +1,6 @@
 # 2126: Humanity's Second Home Initiative
 
-Minimal Three.js shared gameplay core for a browser-based Earth → Moon → Mars hackathon game. The demo intentionally uses primitive geometry so scene developers can replace content without replacing the engine.
+Three.js shared gameplay runtime for the browser-based Earth → Moon → Mars hackathon game. Earth is the P0-complete first chapter; Moon and Mars are isolated scene adapters that reuse the same engine services.
 
 ## Run it
 
@@ -90,3 +90,12 @@ ctx.interaction.add(rocket, {
 ```
 
 Do not import another scene from a scene. Communicate only through `ctx.state`, `ctx.interaction`, and `ctx.sceneManager`.
+
+## Integrated navigation
+
+- Earth space elevator → Moon
+- Moon observatory gate or deep-space rocket → Mars
+- Moon return gate → Earth
+- Mars quick gate → Earth or Moon
+
+Moon and Mars may temporarily configure the shared camera and renderer through `createSceneRuntimeAdapter`. Their cleanup restores the previous settings; they never create a second renderer, camera, controller, input listener, animation loop, or global store.
