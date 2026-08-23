@@ -2654,7 +2654,7 @@ function updateArchive(cfg) {
     const xp = XP_LINKS[cfg.key];
     oEnter.style.display = xp ? '' : 'none';
     if (xp) {
-      oEnter.textContent = (cfg.key === 'mars' ? '🔴' : '🌙') + ' 开始探索';
+      oEnter.textContent = ({ earth: '🌍', mars: '🔴' }[cfg.key] || '🌙') + ' 开始探索';
       oEnter.dataset.target = xp;
     }
   }
@@ -3064,15 +3064,19 @@ function askChipsFor(key) {
 function askAbout(key) {
   aiSay('关于' + HUB_ARCHIVES[key].name + '，你想知道什么？', askChipsFor(key));
 }
-// 实景体验入口路由：月球 / 火星
-const XP_LINKS = { moon: 'moon-base.html', mars: 'mars-city.html' };
+// 实景体验入口路由：地球 / 月球 / 火星
+// earth → 主工程地球关卡（共享核心 2126 仓库根路径）；独立部署本站时则落到站点根。
+const XP_LINKS = { earth: '/', moon: 'moon-base.html', mars: 'mars-city.html' };
 const goXP = (key) => () => { if (XP_LINKS[key]) window.location.href = XP_LINKS[key]; };
 const goMoonBase = goXP('moon');
 document.getElementById('hdAsk').addEventListener('click', () => { if (currentHubFile) askAbout(currentHubFile); });
 document.getElementById('hdClose').addEventListener('click', () => closeHubArchive());
 document.getElementById('hdEnter').addEventListener('click', () => { if (currentHubFile && XP_LINKS[currentHubFile]) goXP(currentHubFile)(); });
 document.getElementById('oEnter').addEventListener('click', function () { if (this.dataset.target) window.location.href = this.dataset.target; });
-// 任务面板「月球科研基地」「火星第二家园」条目 —— 点击直达实景体验
+// 任务面板「地球文明档案」「月球科研基地」「火星第二家园」条目 —— 点击直达实景体验
+const earthMsn = document.querySelector('#missionList .msn[data-m="earth"]');
+earthMsn.classList.add('go');
+earthMsn.addEventListener('click', goXP('earth'));
 const moonMsn = document.querySelector('#missionList .msn[data-m="moon"]');
 moonMsn.classList.add('go');
 moonMsn.addEventListener('click', goMoonBase);
