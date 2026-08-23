@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GameState } from '../src/core/GameState.js';
 import { InteractionSystem } from '../src/core/InteractionSystem.js';
 import { createEarthScene } from '../src/scenes/EarthScene.js';
+import * as outpostModule from '../src/scenes/earth/outpost.js';
 
 // jsdom 中不真实请求星达 GLB：loadAsync 永久挂起，星达保持青蓝占位体，测试保持确定
 vi.mock('three/addons/loaders/GLTFLoader.js', () => ({
@@ -113,10 +114,14 @@ describe('EarthScene', () => {
     expect(ctx.player.setEnabled).toHaveBeenLastCalledWith(false);
     expect(ctx.interaction.enabled).toBe(false);
 
-    // 推进演出直到转场
-    for (let i = 0; i < 120 && !ctx.sceneManager.go.mock.calls.length; i += 1) earth.update(0.1);
-    expect(ctx.sceneManager.go).toHaveBeenCalledWith('moon');
-    // 转场前输入已恢复（SceneManager 需要捕获 enabled=true）
+    // 推进演出直到交接（约 10.8s 演出 + 1.25s 白场停留，dt 泵帧驱动）
+    const handoff = vi.spyOn(outpostModule, 'goToMoonOutpost').mockImplementation(() => {});
+    for (let i = 0; i < 160 && handoff.mock.calls.length === 0; i += 1) earth.update(0.1);
+    expect(handoff).toHaveBeenCalledTimes(1);
+    // 终点是独立前哨站：不再经 SceneManager 进入适配器版月球
+    expect(ctx.sceneManager.go).not.toHaveBeenCalled();
+    handoff.mockRestore();
+    // 交接前输入已恢复（跳转失败时地球保持可玩）
     expect(ctx.player.setEnabled).toHaveBeenLastCalledWith(true);
     expect(ctx.interaction.enabled).toBe(true);
   });
@@ -124,6 +129,7 @@ describe('EarthScene', () => {
   it('moon-portal starts ascent instead of instant teleport', () => {
     ctx = makeCtx();
     earth = createEarthScene(ctx);
+    const handoff = vi.spyOn(outpostModule, 'goToMoonOutpost').mockImplementation(() => {});
     const portal = earth.scene.getObjectByName('moon-portal');
     const { text, onInteract } = ctx.interaction.entries.get(portal);
 
@@ -131,12 +137,16 @@ describe('EarthScene', () => {
     onInteract();
     expect(ctx.sceneManager.go).not.toHaveBeenCalled(); // 不再立即跳场景
     expect(document.querySelector('.earth-skip-hint')).toBeTruthy(); // 演出期间显示跳过提示
-    for (let i = 0; i < 120 && !ctx.sceneManager.go.mock.calls.length; i += 1) earth.update(0.1);
-    expect(ctx.sceneManager.go).toHaveBeenCalledWith('moon');
+    for (let i = 0; i < 160 && handoff.mock.calls.length === 0; i += 1) earth.update(0.1);
+    // 演出结束后跨页交接至独立月球前哨站，而非 SceneManager 的适配器月球
+    expect(handoff).toHaveBeenCalledTimes(1);
+    expect(outpostModule.MOON_OUTPOST_URL).toBe('outpost/moon-base.html');
+    expect(ctx.sceneManager.go).not.toHaveBeenCalled();
     expect(document.querySelector('.earth-skip-hint')).toBeNull(); // 演出结束提示移除
     // 演出创建了临时地月视觉对象（随 dispose 清理）
     expect(earth.scene.getObjectByName('ascent-moon')).toBeTruthy();
     expect(earth.scene.getObjectByName('ascent-earth')).toBeTruthy();
+    handoff.mockRestore();
   });
 
   it('dispose is idempotent, restores first-person and cleans all DOM', () => {

@@ -17,7 +17,7 @@ import { createCityStatus } from './earth/cityStatus.js';
 
 // 2126：人类第二家园计划 · 第一关「地球」。
 // 体验链：中央广场出生（第三人称操控星达）→ 小满/NPC 对话 → 深空规划馆 → 太空电梯
-// → 地月上升演出 → sceneManager.go('moon')。本场景只消费 Shared Core 注入的 ctx。
+// → 地月上升演出 → 跨页交接至独立月球前哨站（public/outpost/）。本场景只消费 Shared Core 注入的 ctx。
 
 const XIAOMAN_LINES = [
   '早上好呀星达！我是小满，这座城市的陪伴型 AI。今天天气是我排的，还不错吧？',

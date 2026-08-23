@@ -6,6 +6,7 @@ import { SceneManager } from '../src/core/SceneManager.js';
 import { createEarthScene } from '../src/scenes/EarthScene.js';
 import { createMoonScene } from '../src/scenes/MoonScene.js';
 import { createMarsScene } from '../src/scenes/MarsScene.js';
+import * as outpostModule from '../src/scenes/earth/outpost.js';
 
 // jsdom 中不真实请求星达 GLB：loadAsync 永久挂起，星达保持占位体
 vi.mock('three/addons/loaders/GLTFLoader.js', () => ({
@@ -62,12 +63,21 @@ describe('actual scene integration flow', () => {
     expect(state.get('visitedSolarSystem')).toBe(true);
     // 展厅解说 AI 是模态分支对话：关闭后才能继续其他交互
     document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    // 太空电梯的终点已改为独立月球前哨站（跨页交接）：以 spy 捕获跳转
+    const handoff = vi.spyOn(outpostModule, 'goToMoonOutpost').mockImplementation(() => {});
     await interact('moon-portal'); // 触发太空电梯上升演出（约 9.4s 的 dt 驱动序列）
-    // 演出在场景 update(dt) 中推进：模拟帧推进直到转场完成
-    for (let i = 0; i < 160 && state.get('currentScene') !== 'moon'; i += 1) {
+    // 演出在场景 update(dt) 中推进：结束 + 白场停留（1.25s）后触发交接
+    for (let i = 0; i < 160 && handoff.mock.calls.length === 0; i += 1) {
       manager.getCurrentScene()?.update(0.1);
       await manager.queue;
     }
+    expect(handoff).toHaveBeenCalledTimes(1);
+    // 交接不经过 SceneManager：地球仍是当前场景
+    expect(state.get('currentScene')).toBe('earth');
+    handoff.mockRestore();
+
+    // 适配器版 Moon/Mars 仍注册在册（火星航线与回归覆盖），经 SceneManager 直达
+    await manager.go('moon');
     expect(state.get('currentScene')).toBe('moon');
     expect(state.get('arrivedMoon')).toBe(true);
     expect(interaction.entries.size).toBe(4);

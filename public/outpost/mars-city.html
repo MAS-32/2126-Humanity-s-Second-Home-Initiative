@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2126 — 火星殖民城市 · 曙光城</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --ink: rgba(235,240,248,0.9);
+    --dim: rgba(200,210,228,0.45);
+    --cyan: #7fd8ff;
+    --mars: #ff9a5c;
+    --glass: rgba(12,18,30,0.55);
+    --line: rgba(160,200,255,0.14);
+  }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #05070d; }
+  body {
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", "PingFang SC", sans-serif;
+    color: var(--ink);
+  }
+
+  /* ===== 星空 ===== */
+  .stars, .stars2 { position: fixed; inset: 0; pointer-events: none; }
+  .stars {
+    background-image:
+      radial-gradient(1px 1px at 12% 22%, rgba(255,255,255,.8), transparent 100%),
+      radial-gradient(1px 1px at 32% 68%, rgba(255,255,255,.55), transparent 100%),
+      radial-gradient(1.5px 1.5px at 54% 14%, rgba(255,244,230,.7), transparent 100%),
+      radial-gradient(1px 1px at 68% 44%, rgba(255,255,255,.6), transparent 100%),
+      radial-gradient(1px 1px at 82% 76%, rgba(220,236,255,.7), transparent 100%),
+      radial-gradient(1.5px 1.5px at 90% 28%, rgba(255,255,255,.5), transparent 100%),
+      radial-gradient(1px 1px at 8% 82%, rgba(255,255,255,.45), transparent 100%),
+      radial-gradient(1px 1px at 44% 90%, rgba(255,230,210,.55), transparent 100%);
+    animation: twinkle 5.5s ease-in-out infinite alternate;
+  }
+  .stars2 {
+    background-image:
+      radial-gradient(1px 1px at 20% 46%, rgba(255,255,255,.4), transparent 100%),
+      radial-gradient(1px 1px at 58% 62%, rgba(255,255,255,.35), transparent 100%),
+      radial-gradient(1px 1px at 74% 8%, rgba(255,255,255,.5), transparent 100%),
+      radial-gradient(1px 1px at 96% 58%, rgba(255,248,238,.45), transparent 100%),
+      radial-gradient(1px 1px at 38% 34%, rgba(255,255,255,.35), transparent 100%);
+    animation: twinkle 7s ease-in-out infinite alternate-reverse;
+  }
+  @keyframes twinkle { from { opacity: .55; } to { opacity: 1; } }
+
+  /* ===== 火星球体 ===== */
+  .mars-wrap {
+    position: fixed; right: -12vw; top: 50%; transform: translateY(-50%);
+    width: 74vmin; height: 74vmin; pointer-events: none;
+  }
+  .mars-glow {
+    position: absolute; inset: -18%;
+    background: radial-gradient(circle, rgba(255,140,80,0.22), rgba(255,120,60,0.07) 45%, transparent 68%);
+    animation: breathe 6s ease-in-out infinite;
+  }
+  .mars-body {
+    position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+    background:
+      radial-gradient(circle at 32% 30%, #f0a074 0%, #d97a4a 34%, #a84f2e 62%, #6f2f1c 86%, #4a1d12 100%);
+    box-shadow:
+      inset -18px -24px 60px rgba(20,6,2,0.75),
+      inset 10px 14px 34px rgba(255,190,150,0.18);
+  }
+  .mars-body::before {
+    content: ''; position: absolute; inset: -20%;
+    background:
+      repeating-linear-gradient(115deg, transparent 0 9%, rgba(120,50,25,0.35) 9% 12%),
+      repeating-linear-gradient(-72deg, transparent 0 14%, rgba(90,35,18,0.28) 14% 16%);
+    animation: spin 120s linear infinite;
+  }
+  .mars-body::after {
+    content: ''; position: absolute;
+    left: 18%; top: 7%; width: 34%; height: 12%; border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(255,250,244,0.85), rgba(255,250,244,0.25) 60%, transparent 75%);
+    filter: blur(2px);
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes breathe { 0%,100% { opacity: .8; } 50% { opacity: 1; } }
+
+  /* ===== HUD ===== */
+  .hud-tl { position: fixed; top: 30px; left: 34px; font-size: 11px; letter-spacing: .34em; opacity: 0; animation: fadein 2s ease .5s forwards; }
+  .hud-tl .sub { margin-top: 6px; font-size: 9px; letter-spacing: .45em; color: var(--dim); }
+  .hud-tr { position: fixed; top: 30px; right: 34px; font-size: 9px; letter-spacing: .25em; color: var(--dim); text-align: right; opacity: 0; animation: fadein 2s ease .9s forwards; }
+  .hud-tr b { color: var(--mars); font-weight: 500; }
+
+  /* ===== 档案面板 ===== */
+  .panel {
+    position: fixed; left: 34px; top: 50%; transform: translateY(-50%);
+    width: min(430px, 86vw); z-index: 5;
+    background: linear-gradient(180deg, rgba(14,22,36,0.72), rgba(8,13,24,0.55));
+    border: 1px solid var(--line); border-radius: 16px;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.55), inset 0 0 40px rgba(255,150,90,0.04);
+    padding: 24px 26px 20px;
+    opacity: 0; animation: fadein 1.6s ease 1.1s forwards;
+  }
+  .tag {
+    display: inline-block; font-size: 9px; letter-spacing: .3em; color: #04121f;
+    background: var(--mars); padding: 3px 10px; border-radius: 10px; margin-bottom: 12px;
+  }
+  h1 { font-size: 24px; font-weight: 400; letter-spacing: .18em; color: #fff; }
+  .theme { margin-top: 6px; font-size: 10px; letter-spacing: .35em; color: var(--mars); }
+  .story { margin-top: 14px; font-size: 12.5px; line-height: 2; color: rgba(228,234,246,0.82); }
+  .grid { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cell {
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    background: rgba(255,150,90,0.04);
+  }
+  .cell .k { font-size: 9px; letter-spacing: .22em; color: var(--dim); }
+  .cell .v { margin-top: 5px; font-size: 11.5px; color: var(--ink); line-height: 1.5; }
+  .tl { margin-top: 14px; }
+  .tl-row { display: flex; gap: 14px; font-size: 11px; padding: 5px 0; border-bottom: 1px dashed rgba(160,200,255,0.08); }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-row .yr { color: var(--mars); font-variant-numeric: tabular-nums; flex: 0 0 44px; }
+  .tl-row .ev { color: rgba(228,234,246,0.75); }
+
+  .status {
+    margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px;
+  }
+  .status .row { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: .18em; color: var(--dim); padding: 3px 0; }
+  .status .row b { color: var(--cyan); font-weight: 500; }
+  .bar { margin-top: 8px; height: 3px; border-radius: 2px; background: rgba(160,200,255,0.1); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; border-radius: 2px;
+    background: linear-gradient(90deg, rgba(255,154,92,0.5), var(--mars));
+    box-shadow: 0 0 10px rgba(255,154,92,0.5);
+    animation: load 2.6s cubic-bezier(0.22,1,0.36,1) 1.6s forwards; }
+  @keyframes load { to { width: 68%; } }
+
+  .foot { margin-top: 16px; display: flex; gap: 10px; align-items: center; }
+  .btn {
+    flex: 1; text-align: center; cursor: pointer; user-select: none;
+    font-size: 11px; letter-spacing: .22em; text-indent: .22em; padding: 11px 0; border-radius: 8px;
+    border: 1px solid rgba(127,216,255,0.3); color: var(--cyan);
+    background: rgba(127,216,255,0.06); transition: all .25s ease;
+  }
+  .btn:hover { background: rgba(127,216,255,0.14); border-color: rgba(127,216,255,0.55); }
+  .btn.warm { color: #2a1206; background: linear-gradient(180deg, #ffb07a, #ff8f52); border: none; box-shadow: 0 0 22px rgba(255,150,90,0.35); }
+  .btn.warm:hover { box-shadow: 0 0 30px rgba(255,150,90,0.55); }
+
+  .note { margin-top: 12px; text-align: center; font-size: 9px; letter-spacing: .3em; color: var(--dim); }
+
+  @keyframes fadein { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .panel { animation-name: fadein-p; }
+  @keyframes fadein-p { from { opacity: 0; transform: translateY(calc(-50% + 14px)); } to { opacity: 1; transform: translateY(-50%); } }
+
+  @media (max-width: 720px) {
+    .mars-wrap { right: -30vw; opacity: .8; }
+    .panel { top: auto; bottom: 26px; transform: none; animation-name: fadein; }
+  }
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<div class="stars2"></div>
+<div class="mars-wrap"><div class="mars-glow"></div><div class="mars-body"></div></div>
+
+<div class="hud-tl">
+  2126 第二家园计划
+  <div class="sub">火星殖民城市 · MARS</div>
+</div>
+<div class="hud-tr">
+  当前观测目标：火星<br>
+  殖民进度 <b>三期扩建中</b><br>
+  文明等级 <b>二级文明</b>
+</div>
+
+<div class="panel">
+  <span class="tag">MARS · 第二家园</span>
+  <h1>曙光城 · AURORA</h1>
+  <div class="theme">人类亲手点燃的第二片天空</div>
+  <p class="story">
+    火星曾是一颗干涸的星球，红色的荒漠下埋着远古河流的遗迹。第二家园计划用半个世纪在这里建起第一座穹顶、第一条封闭水循环、第一片地下麦田。2126 年，「曙光」城里已经出生了第一批火星孩子——他们抬头看到的不是地球，而是人类亲手点亮的第二片天空。
+  </p>
+  <div class="grid">
+    <div class="cell"><div class="k">生态穹顶群</div><div class="v">闭环生命保障系统</div></div>
+    <div class="cell"><div class="k">地下农业</div><div class="v">粮食自给率 61%</div></div>
+    <div class="cell"><div class="k">赤道工业区</div><div class="v">原位资源利用</div></div>
+    <div class="cell"><div class="k">愿景 2150</div><div class="v">百万人火星城市</div></div>
+  </div>
+  <div class="tl">
+    <div class="tl-row"><span class="yr">2033</span><span class="ev">首批殖民者登陆乌托邦平原</span></div>
+    <div class="tl-row"><span class="yr">2070</span><span class="ev">第一座生态穹顶「曙光」落成</span></div>
+    <div class="tl-row"><span class="yr">2126</span><span class="ev">三期扩建启动 · 火星出生人口突破三千</span></div>
+  </div>
+  <div class="status">
+    <div class="row"><span>资源开发状态</span><b>赤道工业区 · 运营中</b></div>
+    <div class="row"><span>生态改造计划</span><b>穹顶闭环 · 稳定运行</b></div>
+    <div class="bar"><i></i></div>
+  </div>
+  <div class="foot">
+    <div class="btn warm" onclick="window.location.href='solar-hub.html'">← 返回太阳系</div>
+    <div class="btn" onclick="window.location.href='moon-base.html'">月球前哨 →</div>
+  </div>
+  <div class="note">火星实景探索模块 · 建设中 · 敬请期待</div>
+</div>
+</body>
+</html>

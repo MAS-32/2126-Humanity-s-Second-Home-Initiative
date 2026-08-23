@@ -1,13 +1,19 @@
 import * as THREE from 'three';
+import { goToMoonOutpost } from './outpost.js';
 
 // 太空电梯地月上升演出（scripted cutscene，dt 驱动状态机）。
 // 八阶段强节奏转场（约 10.8s），任何时刻画面里都有明确的视觉参照物：
-//   登舱 → 城市缩小 → 穿云 → 大气变深 → 地球曲率 → 近地轨道设施掠过 → 月球建立 → 转场
+//   登舱 → 城市缩小 → 穿云 → 大气变深 → 地球曲率 → 近地轨道设施掠过 → 月球建立 → 交接
 // 绝不允许出现数秒没有视觉反馈的空白天空。
 // 跳过：E / Esc 即按即快进；长按空格 0.6s 快进（防误触）。
-// 演出期间玩家输入被禁用；结束前恢复输入（保证 SceneManager 捕获到 enabled=true）。
-// 云/星/地球/空间站/月球都是临时视觉对象，随 Earth 场景 dispose 一并销毁，与 MoonScene 无关。
-// 收尾：白场章节标题（CHAPTER II · 月球）覆盖场景切换，玩家永远看不到开发态过渡。
+// 演出期间玩家输入被禁用；结束时恢复输入（跳转失败时地球关卡保持可玩）。
+// 云/星/地球/空间站/月球都是临时视觉对象，随 Earth 场景 dispose 一并销毁，与目的地无关。
+// 收尾：白场章节标题（CHAPTER II · 月球）覆盖跨页交接——升空终点是独立部署的
+// 月球前哨站（public/outpost/，自有运行时），不再进入 Shared Core 的适配器版 MoonScene。
+
+// 白场章节标题的停留时长：先让标题完整亮起（CSS 过渡 0.8s），再跳页，
+// 玩家永远看不到两个运行时之间的裸切换。
+const HANDOFF_HOLD = 1.25;
 
 const ELEVATOR = new THREE.Vector3(35, 0, -35);
 const PHASE = {
@@ -59,6 +65,11 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
   let tempObjects = [];
   let finished = false;
   const flashed = {};
+
+  // 交接阶段：演出已结束（active=false），白场标题停留 HANDOFF_HOLD 后跳转前哨站。
+  // 与演出一样由 update(dt) 推进（dt 驱动，测试可泵帧，不依赖真实计时器）。
+  let handoffPending = false;
+  let handoffT = 0;
 
   const cameraStart = new THREE.Vector3();
   const avatarStart = new THREE.Vector3();
@@ -233,10 +244,9 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
     ascentHudText = '';
   };
 
-  // ---- 章节转场：白场 + 章节标题覆盖场景切换（同步 go('moon')，DOM 遮罩跨场景驻留）----
-  // 生命周期自管理：Earth 场景 dispose 会在 go('moon') 时立即发生，遮罩必须
-  // 活得比 Earth 久——由自身定时器移除，不随场景清理。循环往返时每场至多一个，
-  // 2.7s 后自动消失，不积累。
+  // ---- 章节转场：白场 + 章节标题覆盖跨页交接（DOM 遮罩在页面卸载前驻留）----
+  // 生命周期自管理：遮罩由自身定时器移除；真实浏览器中页面在 HANDOFF_HOLD 后
+  // 跳转独立前哨站，卸载带走一切。循环往返时每场至多一个，不积累。
   const playChapterTransition = () => {
     const el = document.createElement('div');
     el.className = 'earth-chapter';
@@ -288,7 +298,17 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
     },
 
     update(dt) {
-      if (!active) return;
+      if (!active) {
+        // 交接阶段：白场标题停留够了就跳转独立前哨站（只触发一次）
+        if (handoffPending) {
+          handoffT += dt;
+          if (handoffT >= HANDOFF_HOLD) {
+            handoffPending = false;
+            goToMoonOutpost();
+          }
+        }
+        return;
+      }
       t += dt;
       // 长按空格累计，达到阈值快进到最后阶段
       if (spaceHeld) {
@@ -452,11 +472,13 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
       hideMist();
       hideAscentHud();
       elevator?.setBoarding?.(false);
-      playChapterTransition(); // 白场章节标题覆盖场景切换（自管理，不随 Earth dispose 移除）
-      // 先恢复输入，再转场：SceneManager 会捕获 enabled=true 并传递给下一场景
+      playChapterTransition(); // 白场章节标题覆盖跨页交接
+      // 先恢复输入再交接：真实浏览器即将跳页；跳转被拦截/失败时地球保持可玩
       ctx.player.setEnabled?.(true);
       ctx.interaction.setEnabled?.(true);
-      ctx.sceneManager.go('moon');
+      // 交接目的地 = 独立月球前哨站（跨页跳转），不再 go('moon') 进入适配器场景
+      handoffPending = true;
+      handoffT = 0;
     },
 
     dispose() {
@@ -466,7 +488,9 @@ export function createAscent({ ctx, scene, avatar, elevator = null, audio = null
       hideMist();
       hideAscentHud();
       elevator?.setBoarding?.(false);
-      // 章节转场遮罩由自身定时器移除——它需要比 Earth 活得久以盖住场景切换
+      // 场景销毁即取消未完成的交接（例如测试中紧随其后的 go() 转场）
+      handoffPending = false;
+      // 章节转场遮罩由自身定时器移除——它需要比 Earth 活得久以盖住页面切换
       // 临时对象留在 scene 中，由 disposeScene 统一释放
       tempObjects = [];
       active = false;

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2126 · 人类第二家园计划 — MARS CIVILIZATION</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#02040a;
+    font-family:"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif; color:#dfeaf2; }
+  #scene { position:fixed; inset:0; display:block; touch-action:none; }
+
+  .hud { position:fixed; z-index:10; pointer-events:none; }
+  .panel { pointer-events:auto; background:rgba(6,14,22,.55); border:1px solid rgba(110,231,255,.22);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-radius:10px; }
+
+  #titleBox { top:26px; left:28px; padding:16px 22px 14px; }
+  #titleBox .kicker { font-size:11px; letter-spacing:.5em; color:#6ee7ff; opacity:.9; }
+  #titleBox h1 { font-size:26px; font-weight:200; letter-spacing:.14em; margin:6px 0 4px; color:#f2f8fb;
+    text-shadow:0 0 18px rgba(110,231,255,.35); }
+  #titleBox .sub { font-size:11px; letter-spacing:.28em; color:#8fa9b8; }
+
+  #nav { top:26px; left:50%; transform:translateX(-50%); display:flex; gap:8px; padding:8px; }
+  #nav button { font-family:inherit; font-size:12px; letter-spacing:.3em; padding:8px 18px 8px 21px;
+    background:transparent; color:#7d97a6; border:1px solid transparent; border-radius:6px; cursor:pointer; transition:.25s; }
+  #nav button.cur { color:#0b1620; background:#6ee7ff; box-shadow:0 0 18px rgba(110,231,255,.5); }
+  #nav button:not(.cur):hover { color:#cfe9f5; border-color:rgba(110,231,255,.35); }
+
+  #actions { top:26px; right:28px; display:flex; flex-direction:column; gap:8px; padding:10px; }
+  #actions button { font-family:inherit; text-align:left; font-size:12px; letter-spacing:.18em;
+    padding:9px 16px; background:rgba(10,22,32,.6); color:#a9c6d4; border:1px solid rgba(110,231,255,.25);
+    border-radius:6px; cursor:pointer; transition:.25s; }
+  #actions button:hover { color:#eaf7ff; border-color:#6ee7ff; box-shadow:0 0 14px rgba(110,231,255,.25); }
+  #actions button.on { color:#0b1620; background:#6ee7ff; }
+
+  #info { left:28px; bottom:28px; width:340px; padding:16px 18px; max-height:42vh; overflow-y:auto; }
+  #info h3 { font-size:15px; font-weight:400; letter-spacing:.12em; color:#8fe9ff; margin-bottom:8px; }
+  #info p { font-size:12px; line-height:1.9; color:#b8ccd8; }
+  #info .npc { margin-top:10px; padding-top:10px; border-top:1px dashed rgba(110,231,255,.25);
+    font-size:12px; line-height:1.9; color:#9fd8c9; }
+  #info .npc b { color:#d9f7ec; font-weight:500; }
+  #info .tag { display:inline-block; font-size:10px; letter-spacing:.2em; color:#0b1620; background:#6ee7ff;
+    border-radius:4px; padding:2px 8px; margin-bottom:8px; }
+
+  #stats { right:28px; bottom:28px; padding:12px 16px; font-size:11px; letter-spacing:.12em;
+    color:#7d97a6; line-height:2; text-align:right; }
+  #stats .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:#5ef2b8;
+    margin-right:6px; animation:blink 1.6s infinite; vertical-align:1px; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  #hint { bottom:28px; left:50%; transform:translateX(-50%); font-size:11px; letter-spacing:.3em; color:#5d7482; white-space:nowrap; }
+
+  #backBtn { position:fixed; bottom:64px; left:50%; transform:translateX(-50%); z-index:20; display:none;
+    font-family:inherit; font-size:12px; letter-spacing:.3em; text-indent:.3em; padding:10px 26px;
+    color:#0b1620; background:#6ee7ff; border:none; border-radius:6px; cursor:pointer;
+    box-shadow:0 0 20px rgba(110,231,255,.4); }
+  #backBtn:hover { background:#a5f1ff; }
+
+  #toast { position:fixed; top:96px; left:50%; transform:translateX(-50%); z-index:30; padding:10px 22px;
+    background:rgba(8,18,28,.85); border:1px solid rgba(110,231,255,.4); border-radius:8px;
+    font-size:12px; letter-spacing:.2em; color:#bfeaff; opacity:0; transition:opacity .4s; pointer-events:none; }
+
+  #intro { position:fixed; inset:0; z-index:50; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; background:radial-gradient(ellipse at 50% 60%, rgba(4,10,18,.25), rgba(2,4,10,.88) 75%);
+    transition:opacity 1.4s; }
+  #intro.hide { opacity:0; pointer-events:none; }
+  #intro .k { font-size:12px; letter-spacing:.8em; color:#6ee7ff; margin-bottom:18px; text-indent:.8em; }
+  #intro h1 { font-size:44px; font-weight:100; letter-spacing:.3em; color:#f4fafc; text-indent:.3em;
+    text-shadow:0 0 30px rgba(110,231,255,.4); }
+  #intro h2 { font-size:13px; font-weight:300; letter-spacing:.5em; color:#7d97a6; margin-top:16px; text-indent:.5em; }
+  #intro p { margin-top:26px; font-size:12px; letter-spacing:.2em; color:#5d7482; line-height:2.2; text-align:center; }
+  #enterBtn { margin-top:40px; font-family:inherit; font-size:13px; letter-spacing:.5em; text-indent:.5em;
+    padding:14px 46px; color:#0b1620; background:#6ee7ff; border:none; border-radius:4px; cursor:pointer;
+    box-shadow:0 0 30px rgba(110,231,255,.45); transition:.3s; }
+  #enterBtn:hover { background:#a5f1ff; box-shadow:0 0 46px rgba(110,231,255,.7); }
+
+  #err { position:fixed; inset:0; z-index:99; display:none; align-items:center; justify-content:center;
+    color:#ff9a8a; font-size:13px; letter-spacing:.1em; padding:40px; text-align:center; }
+
+  /* ---- 地表探索 HUD ---- */
+  #exploreHud { inset:0; display:none; }
+  #exploreHud.on { display:block; }
+  #crosshair { position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%;
+    background:rgba(110,231,255,.9); box-shadow:0 0 8px rgba(110,231,255,.8); }
+  #crosshair::after { content:''; position:absolute; inset:-7px; border:1px solid rgba(110,231,255,.35); border-radius:50%; }
+  #exploreLoc { position:fixed; top:26px; left:50%; transform:translateX(-50%); font-size:12px; letter-spacing:.3em;
+    color:#6ee7ff; padding:9px 22px; white-space:nowrap; pointer-events:none; }
+  #exploreAim { position:fixed; bottom:66px; left:50%; transform:translateX(-50%); max-width:440px; padding:12px 18px;
+    opacity:0; transition:.25s; pointer-events:none; }
+  #exploreAim.on { opacity:1; }
+  #exploreAim .t { color:#6ee7ff; font-size:14px; letter-spacing:.2em; margin-bottom:4px; }
+  #exploreAim .d { font-size:12px; line-height:1.7; color:#c8dde8; }
+  #exploreHint { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); font-size:11px;
+    letter-spacing:.18em; color:#8fa9b8; white-space:nowrap; }
+  #btnSurface { position:fixed; top:26px; right:28px; font-family:inherit; font-size:12px; letter-spacing:.18em;
+    padding:9px 16px; color:#9fc6d8; cursor:pointer; transition:.25s; }
+  #btnSurface:hover { color:#6ee7ff; border-color:rgba(110,231,255,.5); }
+
+  /* ---- NPC 对话窗口 ---- */
+  #npcDialog { position:fixed; left:50%; bottom:120px; transform:translateX(-50%); width:min(460px, 86vw);
+    padding:14px 18px; opacity:0; transition:.25s; pointer-events:none; z-index:12; }
+  #npcDialog.on { opacity:1; }
+  #npcDialog .head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  #npcDialog .avatar { width:34px; height:34px; border-radius:50%; flex-shrink:0;
+    background:radial-gradient(circle at 35% 35%, #ffd7b0, #d97b4a 70%); box-shadow:0 0 12px rgba(217,123,74,.45); }
+  #npcDialog .avatar.ai { background:radial-gradient(circle at 35% 35%, #bfeaff, #4a7ba6 70%); box-shadow:0 0 12px rgba(110,231,255,.45); }
+  #npcDialog .name { font-size:14px; letter-spacing:.12em; color:#f0e6dd; }
+  #npcDialog .role { font-size:10px; letter-spacing:.18em; color:#9fb4c4; margin-top:2px; }
+  #npcDialog .line { font-size:12px; line-height:1.85; color:#c8dde8; }
+  #npcDialog .next { margin-top:8px; font-size:10px; letter-spacing:.2em; color:#6e8694; text-align:right; }
+  #npcDialog .opts { margin-top:9px; display:none; flex-direction:column; gap:6px; }
+  #npcDialog .opts.on { display:flex; }
+  #npcDialog .opts button { font-family:inherit; text-align:left; font-size:12px; letter-spacing:.08em;
+    padding:7px 12px; background:rgba(10,22,32,.68); color:#a9c6d4; border:1px solid rgba(110,231,255,.25);
+    border-radius:6px; cursor:pointer; transition:.2s; pointer-events:auto; }
+  #npcDialog .opts button:hover { color:#eaf7ff; border-color:#6ee7ff; background:rgba(20,40,56,.8); }
+  #npcDialog .opts button b { color:#6ee7ff; margin-right:7px; font-weight:500; }
+
+  /* ---- 第一人称头盔面罩 ---- */
+  #visor { position:fixed; inset:0; z-index:5; display:none; pointer-events:none;
+    background:radial-gradient(ellipse 118% 88% at 50% 50%, transparent 60%, rgba(4,10,16,.5) 86%, rgba(2,6,10,.94) 100%); }
+  #visor.on { display:block; }
+  #visor::before { content:''; position:absolute; top:7%; left:50%; transform:translateX(-50%);
+    width:140px; height:1px; background:linear-gradient(90deg,transparent,rgba(110,231,255,.45),transparent); }
+  #visor::after { content:''; position:absolute; bottom:9%; left:50%; transform:translateX(-50%);
+    width:220px; height:1px; background:linear-gradient(90deg,transparent,rgba(110,231,255,.25),transparent); }
+
+
+  /* ---- 星达引导 & 发现系统 ---- */
+  #objective { position:fixed; top:26px; left:28px; padding:12px 16px; min-width:230px; pointer-events:none; }
+  #objective #objT { font-size:12px; letter-spacing:.18em; color:#8ff2d2; }
+  #objective #objC { font-size:10px; letter-spacing:.22em; color:#6e8694; margin-top:5px; }
+  #discBanner { position:fixed; top:80px; left:50%; transform:translateX(-50%); font-size:15px;
+    letter-spacing:.4em; text-indent:.4em; color:#d9f7ec; text-shadow:0 0 16px rgba(125,242,201,.6);
+    opacity:0; pointer-events:none; white-space:nowrap; }
+  #discBanner.pop { animation:discPop 3.4s ease forwards; }
+  @keyframes discPop { 0%{opacity:0; transform:translate(-50%,10px);} 12%{opacity:1; transform:translate(-50%,0);}
+    78%{opacity:1;} 100%{opacity:0;} }
+  #xdDialog { position:fixed; left:28px; bottom:66px; width:min(400px, 84vw); padding:13px 16px;
+    opacity:0; transition:.3s; pointer-events:none; z-index:12; }
+  #xdDialog.on { opacity:1; }
+  #xdDialog .head { display:flex; align-items:center; gap:10px; margin-bottom:7px; }
+  #xdDialog .avatar { width:40px; height:40px; border-radius:50%; object-fit:cover; background:#eafff6;
+    border:1px solid rgba(125,242,201,.5); box-shadow:0 0 14px rgba(125,242,201,.35); }
+  #xdDialog .name { font-size:14px; letter-spacing:.14em; color:#a9f5d8; }
+  #xdDialog .role { font-size:10px; letter-spacing:.2em; color:#9fb4c4; margin-top:2px; }
+  #xdDialog .line { font-size:12px; line-height:1.85; color:#d2e8dd; min-height:22px; }
+  #xdDialog .next { margin-top:7px; font-size:10px; letter-spacing:.2em; color:#6e8694; text-align:right; }
+
+  @media (max-width:760px){
+    #info{ width:min(300px, 72vw); bottom:18px; left:18px; }
+    #titleBox{ left:16px; top:16px; padding:12px 16px 10px; } #titleBox h1{ font-size:17px; }
+    #nav{ top:auto; bottom:110px; } #actions{ right:16px; top:16px; } #stats{ display:none; }
+    #hint{ display:none; } #intro h1{ font-size:26px; }
+  }
+</style>
+  <script type="module" crossorigin src="./assets/index-BFZpsxnI.js"></script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="titleBox" class="hud panel">
+  <div class="kicker">SECOND HOME PROJECT</div>
+  <h1>2126 · 人类第二家园计划</h1>
+  <div class="sub">MARS CIVILIZATION · 火星文明模拟系统</div>
+</div>
+
+<div id="nav" class="hud panel">
+  <button data-nav="earth">地球</button>
+  <button data-nav="moon">月球</button>
+  <button class="cur">火星</button>
+</div>
+
+<div id="actions" class="hud panel">
+  <button id="btnLand">⬇ 登陆探索</button>
+  <button id="btnIce">◈ 地下水冰透视</button>
+  <button id="btnTour">▶ 城市巡览</button>
+  <button id="btnReset">⟲ 自由视角</button>
+</div>
+
+<div id="info" class="hud panel">
+  <h3>火星文明 · 2126</h3>
+  <p>公元 2126 年，火星人口突破 100 万。五座穹顶城市与奥林帕斯山麓科研站由城际磁悬浮干线相连，14 座前哨定居点散布全球，赤道工业带与轨道空间港昼夜不息——这里不是前哨站，是正在运转的人类第二家园。</p>
+  <p style="margin-top:6px;color:#6e8694;">点击任意城市，镜头将带你飞入城市内部。</p>
+</div>
+
+<div id="stats" class="hud panel">
+  <div><span class="dot"></span>人口 1,024,000</div>
+  <div><span class="dot"></span>穹顶城市 × 5 · 科研站 × 1 · 定居点 × 14</div>
+  <div><span class="dot"></span>城际磁悬浮干线 × 5</div>
+  <div><span class="dot"></span>水冰储量 4.6×10⁸ m³</div>
+</div>
+
+<div id="hint" class="hud">拖动旋转 · 滚轮缩放 · 点击城市进入</div>
+<button id="backBtn">← 返回星球</button>
+
+<div id="exploreHud" class="hud">
+  <div id="visor"></div>
+  <div id="crosshair"></div>
+  <div id="exploreLoc" class="panel">—</div>
+  <div id="exploreAim" class="panel"><div class="t" id="aimT"></div><div class="d" id="aimD"></div></div>
+  <div id="npcDialog" class="panel">
+    <div class="head">
+      <div class="avatar" id="npcAvatar"></div>
+      <div><div class="name" id="npcName"></div><div class="role" id="npcRole"></div></div>
+    </div>
+    <div class="line" id="npcLine"></div>
+    <div class="opts" id="npcOpts"></div>
+    <div class="next" id="npcNext">靠近继续聆听 · 离开结束对话</div>
+  </div>
+  <div id="xdDialog" class="panel">
+    <div class="head">
+      <img class="avatar" src="textures/xingda.png" alt="星达">
+      <div><div class="name">星达</div><div class="role">火星智能生命 · 地表旅伴</div></div>
+    </div>
+    <div class="line" id="xdLine"></div>
+    <div class="next">F 呼唤星达</div>
+  </div>
+  <div id="objective" class="panel"><div id="objT">—</div><div id="objC"></div></div>
+  <div id="discBanner">✦ <span id="discName"></span></div>
+  <div id="exploreHint">W A S D 移动 · 鼠标 环视 · Shift 加速 · 空格 跳跃 · V 视角 · F 星达 · 靠近建筑/NPC 查看</div>
+  <button id="btnSurface" class="panel">▲ 返回轨道</button>
+</div>
+<div id="toast"></div>
+<div id="err"></div>
+
+<div id="intro">
+  <div class="k">A.D. 2126</div>
+  <h1>人类第二家园</h1>
+  <h2>MARS CIVILIZATION SYSTEM</h2>
+  <p>一百年前，它只是探测器照片里的红色荒漠。<br>现在，穹顶之下有河流、森林与一百万盏灯火。</p>
+  <button id="enterBtn">进 入 火 星</button>
+</div>
+
+
+<script>
+  // 2126 总工程托管注入:火星章节的跨页链接(MarsModule.goto 消费)。
+  // 全部相对路径——任意子路径部署(GitHub Pages 项目页)同样成立。
+  window.MARS_INTEGRATION_ENV = {
+    earthUrl: '../?skip-opening',
+    moonUrl: '../outpost/moon-base.html',
+    hubUrl: '../outpost/solar-hub.html',
+  };
+</script>
+</body>
+</html>
