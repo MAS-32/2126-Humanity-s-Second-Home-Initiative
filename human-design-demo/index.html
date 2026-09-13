@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>看见你的另一面｜人类图 × 星座</title>
+  <meta name="description" content="从出生信息开始，计算并理解你的人类图与星座。计算与 AI 解读严格分离。" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="eyebrow">HUMAN DESIGN × ASTROLOGY</div>
+      <h1>看见你的另一面</h1>
+      <p class="lead">从出生信息开始，计算你的人类图与星座，再由 AI 把复杂结果翻译成人话。</p>
+      <div class="principle">计算由确定性程序完成 · AI 只负责解释，不负责“猜盘”</div>
+    </section>
+
+    <section class="card form-card">
+      <div class="mode-tabs" role="tablist">
+        <button type="button" class="tab active" data-mode="precise">我知道出生时间</button>
+        <button type="button" class="tab" data-mode="unknown">我不知道准确时间</button>
+      </div>
+
+      <form id="birth-form">
+        <div class="grid two">
+          <label>出生日期<input required type="date" id="birthdate" value="2008-07-30" /></label>
+          <label id="time-wrap">出生时间<input required type="time" id="birthtime" value="00:07" /></label>
+        </div>
+        <div class="grid two">
+          <label>出生城市<input required type="text" id="city" placeholder="例如：深圳" value="揭阳" /></label>
+          <label>国家 / 地区<input type="text" id="country" value="中国" /></label>
+        </div>
+        <p id="mode-note" class="note">精确时间模式可以计算完整人类图，并支持上升等时间敏感结果。</p>
+        <button id="submit-btn" class="primary" type="submit">开始计算</button>
+      </form>
+    </section>
+
+    <section id="status" class="card status-card hidden" aria-live="polite">
+      <div class="spinner"></div>
+      <div>
+        <strong id="status-title">正在计算你的结果…</strong>
+        <p id="status-text">正在解析地点、时区与出生时刻。</p>
+      </div>
+    </section>
+
+    <section id="error-card" class="card error-card hidden" aria-live="polite">
+      <strong>这次没有算出来</strong>
+      <p id="error-text"></p>
+      <button id="retry-btn" class="secondary" type="button">重新计算</button>
+    </section>
+
+    <section id="results" class="results hidden">
+      <div class="result-heading">
+        <div>
+          <span class="eyebrow">YOUR RESULT</span>
+          <h2 id="result-title">你的基础画像</h2>
+        </div>
+        <span id="result-meta" class="meta-pill"></span>
+      </div>
+
+      <section id="precise-results">
+        <div class="result-grid hero-results">
+          <article class="result-card accent">
+            <span class="result-label">人类图类型</span>
+            <strong id="hd-type">—</strong>
+            <p id="hd-strategy">—</p>
+          </article>
+          <article class="result-card">
+            <span class="result-label">内在权威</span>
+            <strong id="hd-authority">—</strong>
+            <p>用于描述这套体系中的决策方式。</p>
+          </article>
+          <article class="result-card">
+            <span class="result-label">人生角色</span>
+            <strong id="hd-profile">—</strong>
+            <p>人格太阳线 / 设计太阳线。</p>
+          </article>
+        </div>
+
+        <div class="section-head compact"><span>01</span><h2>星座 · 出生盘</h2></div>
+        <div id="astro-grid" class="result-grid six"></div>
+
+        <div class="section-head compact"><span>02</span><h2>人类图结构</h2></div>
+        <div class="detail-grid">
+          <article class="detail-card"><span>定义中心</span><div id="defined-centers" class="chips"></div></article>
+          <article class="detail-card"><span>通道</span><div id="defined-channels" class="chips"></div></article>
+          <article class="detail-card wide"><span>已激活闸门</span><div id="activated-gates" class="chips"></div></article>
+        </div>
+
+        <p class="calculation-note">当前 Demo 使用开源确定性计算引擎返回结构化结果；正式产品上线前仍会继续与独立人类图计算器逐字段 Benchmark。AI 不参与上述数据计算。</p>
+      </section>
+
+      <section id="unknown-results" class="hidden">
+        <div class="unknown-intro">
+          <strong>我们没有替你虚构一个出生时间。</strong>
+          <p>系统分别扫描当天多个时刻，只把稳定结果标为“稳定”；发生变化的字段会直接展示全部候选值。</p>
+        </div>
+        <div id="stability-grid" class="result-grid"></div>
+      </section>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><span>下一步</span><h2>AI 解读层</h2></div>
+      <div class="topics">
+        <button type="button">我是谁</button><button type="button">我怎么做决定</button><button type="button">事业</button><button type="button">关系</button><button type="button">天赋</button><button type="button">容易卡住的地方</button>
+      </div>
+      <p class="note">下一阶段会让 AI 只读取本页已经计算完成的数据，并以“结论 → 人话解释 → 数据依据”的方式解读。</p>
+    </section>
+
+    <footer>Demo v0.2 · 真实计算流程已接通 · Benchmark 持续进行</footer>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>
